@@ -1,4 +1,4 @@
-export HOST_SHARE=/scr_pool/
+export HOST_SHARE=${HOST_SHARE-/opt/}
 export CPUS=4
 if [ ! -f /proc/cpuinfo ];then
    CPUS=${CPUS-4}
@@ -106,7 +106,7 @@ function start_dns {
       --dns=127.0.0.1 \
       -v ${HOST_SHARE}/scratch:/scratch \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      qnib/dns \
+      qnib/helixdns \
       ${RCMD}
 }
 
