@@ -175,7 +175,6 @@ function start_slurm {
       --dns=$(d_getip dns) \
       -v ${HOST_SHARE}/scratch:/scratch \
       -v ${HOST_SHARE}/chome:/chome \
-      -v ${HOST_SHARE}/etc:/usr/local/etc \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
       qnib/slurm \
       ${RCMD}
@@ -196,7 +195,7 @@ function start_terminal {
       -v ${HOST_SHARE}/chome:/chome \
       -v ${HOST_SHARE}/etc:/usr/local/etc \
       ${LXC_OPTS} \
-      qnib/terminal:latest \
+      qnib/terminal \
       /bin/bash
 }
 
