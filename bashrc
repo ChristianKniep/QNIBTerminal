@@ -227,7 +227,6 @@ function start_compute {
       --dns=$(d_getip dns) \
       -v ${HOST_SHARE}/scratch:/scratch \
       -v ${HOST_SHARE}/chome:/chome \
-      -v ${HOST_SHARE}/etc:/usr/local/etc \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
       qnib/compute \
       ${RCMD}
