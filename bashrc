@@ -1,4 +1,4 @@
-export HOST_SHARE=${HOST_SHARE-/opt/}
+export HOST_SHARE=${HOST_SHARE-/scr_pool/}
 export CPUS=4
 if [ ! -f /proc/cpuinfo ];then
    CPUS=${CPUS-4}
@@ -43,6 +43,10 @@ function eval_cpuset {
          echo 1
          return 0
       fi
+   fi
+   if [ "X${1}" == "Xslurm" ];then
+      echo 0
+      return 0
    fi
    if [[ "X${1}" == Xcompute* ]] ; then
       if [[ ${1} == compute[0-9] ]];then
