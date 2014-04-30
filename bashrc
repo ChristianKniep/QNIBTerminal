@@ -1,5 +1,7 @@
-export HOST_SHARE=${HOST_SHARE-/scr_pool/}
-export CPUS=4
+export DNS_DOMAIN=${DNS_DOMAIN-qnib}
+export HOST_SHARE=${HOST_SHARE-/opt/}
+export CPUS=${CPUS-4}
+export DHOST=${DHOST-localhost}
 if [ ! -f /proc/cpuinfo ];then
    CPUS=${CPUS-4}
 fi
@@ -16,10 +18,25 @@ function d_getip {
    fi
 }
 
+function eval_docker_version {
+   #checks client/server version
+   DVER=$(docker version |egrep "(Client|Server) version:"|awk -F\: '{print $2}'|uniq|sed -e 's/ //g')
+   if [[ "X${DVER}" == X0\.9\.* ]];then
+      echo 9
+      return 0
+   fi
+   if [[ "X${DVER}" == X0.10.* ]];then
+      echo 10
+      return 0
+   fi
+}
+
 function eval_cpuset {
    # returns cpuset.cpus for different types
-   if [ -f /proc/cpuinfo ];then
-      CPUS=$(grep -c ^processor /proc/cpuinfo)
+   if [ ${DHOST} == "localhost" ];then
+      if [ -f /proc/cpuinfo ];then
+         CPUS=$(grep -c ^processor /proc/cpuinfo)
+      fi
    fi
    CNT_CPU=${2-${CPUS}}
    if [ "X${1}" == "Xdns" ];then
@@ -43,10 +60,6 @@ function eval_cpuset {
          echo 1
          return 0
       fi
-   fi
-   if [ "X${1}" == "Xslurm" ];then
-      echo 0
-      return 0
    fi
    if [[ "X${1}" == Xcompute* ]] ; then
       if [[ ${1} == compute[0-9] ]];then
@@ -106,8 +119,12 @@ function start_dns {
    if [ $? -ne 0 ];then
       return 1
    fi
+   DNS="--dns=127.0.0.1"
+   if [ "X$(eval_docker_version)" == "X10" ];then
+     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
+   fi
    docker run ${RMODE} -h dns --name dns \
-      --dns=127.0.0.1 \
+      ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
       qnib/helixdns \
@@ -116,6 +133,7 @@ function start_dns {
 
 function start_elk {
    #starts ELK container and links with DNS
+   CONT_DEV=${CONT_DEV-0}
    DETACHED=${1-0}
    if [ ${DETACHED} -eq 0 ];then
       RMODE="-d"
@@ -128,12 +146,27 @@ function start_elk {
    if [ $? -ne 0 ];then
       return 1
    fi
-   docker run ${RMODE} -h elk --name elk \
-      --dns=$(d_getip dns) \
+   DNS="--dns=$(d_getip dns)"
+   if [ "X$(eval_docker_version)" == "X10" ];then
+     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
+   fi
+   CONT_NAME="elk"
+   IMG_NAME="elk"
+   WWW_PORT=81
+   ES_PORT=9200
+   if [ ${CONT_DEV} -eq 1 ];then
+      echo "Starting dev tag"
+      CONT_NAME="elk-dev"
+      IMG_NAME="elk:dev"
+      WWW_PORT=10081
+      ES_PORT=19200
+   fi
+   docker run ${RMODE} -h ${CONT_NAME} --name ${CONT_NAME} \
+      ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
-      -p 81:80 -p 9200:9200 \
+      -p ${WWW_PORT}:80 -p ${ES_PORT}:9200 \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      qnib/elk \
+      qnib/${IMG_NAME} \
       ${RCMD}
 }
 
@@ -151,8 +184,12 @@ function start_graphite {
    if [ $? -ne 0 ];then
       return 1
    fi
+   DNS="--dns=$(d_getip dns)"
+   if [ "X$(eval_docker_version)" == "X10" ];then
+     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
+   fi
    docker run ${RMODE} -h graphite --name graphite \
-      --dns=$(d_getip dns) \
+      ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       -v ${HOST_SHARE}/whisper:/var/lib/carbon/whisper \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
@@ -175,8 +212,12 @@ function start_slurm {
    if [ $? -ne 0 ];then
       return 1
    fi
+   DNS="--dns=$(d_getip dns)"
+   if [ "X$(eval_docker_version)" == "X10" ];then
+     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
+   fi
    docker run ${RMODE} -h slurm --name slurm \
-      --dns=$(d_getip dns) \
+      ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       -v ${HOST_SHARE}/chome:/chome \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
@@ -191,15 +232,46 @@ function start_terminal {
    if [ "X${LXC_CSET}" != "XX" ];then
       LXC_OPTS="${LXC_OPTS} --lxc-conf=lxc.cgroup.cpuset.cpus=${LXC_CSET}"
    fi
+   LXC_CSHARE=${2-X}
+   if [ "X${LXC_CSHARE}" != "XX" ];then
+      LXC_OPTS="${LXC_OPTS} --lxc-conf=lxc.cgroup.cpu.shares=${LXC_CSHARE}"
+   fi
    RMODE="-t -i --rm=true"
    RCMD="/bin/bash"
-   #--dns=$(d_getip dns) \
+   DNS="--dns=$(d_getip dns)"
+   if [ "X$(eval_docker_version)" == "X10" ];then
+     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
+   fi
+   docker run ${RMODE} \
+      ${DNS} \
+      -v ${HOST_SHARE}/scratch:/scratch \
+      -v ${HOST_SHARE}/chome:/chome \
+      ${LXC_OPTS} \
+      qnib/terminal:latest \
+      /bin/bash
+}
+
+function start_container {
+   #starts given image and links with DNS
+   IMG_NAME=${1-X}
+   if [ "X${IMG_NAME}" == "XX" ];then
+      echo "No image name given"
+      return 1
+   fi
+   LXC_CSET=${2-0}
+   echo "Pin to CPU '${LXC_CSET}'..."
+   LXC_OPTS=" --lxc-conf=lxc.cgroup.cpuset.cpus=${LXC_CSET}"
+   RMODE="-t -i --rm=true"
+   RCMD="/bin/bash"
+   DNS="--dns=$(d_getip dns)"
+   if [ "X$(eval_docker_version)" == "X10" ];then
+     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
+   fi
    docker run ${RMODE} \
       -v ${HOST_SHARE}/scratch:/scratch \
       -v ${HOST_SHARE}/chome:/chome \
-      -v ${HOST_SHARE}/etc:/usr/local/etc \
       ${LXC_OPTS} \
-      qnib/terminal \
+      ${IMG_NAME} \
       /bin/bash
 }
 
@@ -227,8 +299,12 @@ function start_compute {
    if [ $? -ne 0 ];then
       return 1
    fi
+   DNS="--dns=$(d_getip dns)"
+   if [ "X$(eval_docker_version)" == "X10" ];then
+     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
+   fi
    docker run ${RMODE} -h ${CONT_NAME} --name ${CONT_NAME} \
-      --dns=$(d_getip dns) \
+      ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       -v ${HOST_SHARE}/chome:/chome \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
