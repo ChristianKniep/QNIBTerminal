@@ -1,5 +1,6 @@
 export DNS_DOMAIN=${DNS_DOMAIN-qnib}
-export HOST_SHARE=${HOST_SHARE-/opt/}
+export DNS_HOST=${DNS_HOST-dns}
+export HOST_SHARE=${HOST_SHARE-/speed/}
 export CPUS=${CPUS-4}
 export DHOST=${DHOST-localhost}
 if [ ! -f /proc/cpuinfo ];then
@@ -16,6 +17,17 @@ function d_getip {
    else
       echo $(docker inspect -f '{{ .NetworkSettings.IPAddress }}' ${DCONT})
    fi
+}
+
+function d_pullall {
+   echo "#########  Starting download of QNIBTerminal images"
+   echo "###### $(date)"
+   for IMG in fd20 terminal helixdns elk slurm compute;do
+      echo "### pulling qnib/${IMG}"
+      docker pull qnib/${IMG}
+   done
+   echo "###### $(date)"
+   echo "######### END"
 }
 
 function eval_docker_version {
@@ -123,7 +135,7 @@ function start_dns {
    if [ "X$(eval_docker_version)" == "X10" ];then
      DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
    fi
-   docker run ${RMODE} -h dns --name dns \
+   docker run ${RMODE} -h ${DNS_HOST} --name ${DNS_HOST} \
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
@@ -306,7 +318,6 @@ function start_compute {
    docker run ${RMODE} -h ${CONT_NAME} --name ${CONT_NAME} \
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
-      -v ${HOST_SHARE}/chome:/chome \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
       qnib/compute \
       ${RCMD}
