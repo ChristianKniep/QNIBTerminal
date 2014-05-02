@@ -3,6 +3,7 @@ export DNS_HOST=${DNS_HOST-dns}
 export HOST_SHARE=${HOST_SHARE-/speed/}
 export CPUS=${CPUS-4}
 export DHOST=${DHOST-localhost}
+export MAX_MEMORY=${MAX_MEMORY-125M}
 if [ ! -f /proc/cpuinfo ];then
    CPUS=${CPUS-4}
 fi
@@ -158,7 +159,7 @@ function start_elk {
    if [ $? -ne 0 ];then
       return 1
    fi
-   DNS="--dns=$(d_getip dns)"
+   DNS="--dns=$(d_getip ${DNS_HOST})"
    if [ "X$(eval_docker_version)" == "X10" ];then
      DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
    fi
@@ -196,7 +197,7 @@ function start_graphite {
    if [ $? -ne 0 ];then
       return 1
    fi
-   DNS="--dns=$(d_getip dns)"
+   DNS="--dns=$(d_getip ${DNS_HOST})"
    if [ "X$(eval_docker_version)" == "X10" ];then
      DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
    fi
@@ -224,7 +225,7 @@ function start_slurm {
    if [ $? -ne 0 ];then
       return 1
    fi
-   DNS="--dns=$(d_getip dns)"
+   DNS="--dns=$(d_getip ${DNS_HOST})"
    if [ "X$(eval_docker_version)" == "X10" ];then
      DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
    fi
@@ -250,7 +251,7 @@ function start_terminal {
    fi
    RMODE="-t -i --rm=true"
    RCMD="/bin/bash"
-   DNS="--dns=$(d_getip dns)"
+   DNS="--dns=$(d_getip ${DNS_HOST})"
    if [ "X$(eval_docker_version)" == "X10" ];then
      DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
    fi
@@ -311,7 +312,7 @@ function start_compute {
    if [ $? -ne 0 ];then
       return 1
    fi
-   DNS="--dns=$(d_getip dns)"
+   DNS="--dns=$(d_getip ${DNS_HOST})"
    if [ "X$(eval_docker_version)" == "X10" ];then
      DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
    fi
@@ -319,6 +320,7 @@ function start_compute {
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
+      --memory=${MAX_MEMORY} \
       qnib/compute \
       ${RCMD}
 }
