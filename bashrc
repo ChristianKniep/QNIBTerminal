@@ -312,6 +312,7 @@ function start_compute {
    if [ $? -ne 0 ];then
       return 1
    fi
+   CPU_SET=${3-${CPUSET}}
    DNS="--dns=$(d_getip ${DNS_HOST})"
    if [ "X$(eval_docker_version)" == "X10" ];then
      DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
@@ -319,7 +320,7 @@ function start_compute {
    docker run ${RMODE} -h ${CONT_NAME} --name ${CONT_NAME} \
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
-      --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
+      --lxc-conf="lxc.cgroup.cpuset.cpus=${CPU_SET}" \
       --memory=${MAX_MEMORY} \
       qnib/compute \
       ${RCMD}
