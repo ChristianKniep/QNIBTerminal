@@ -8,6 +8,11 @@ if [ ! -f /proc/cpuinfo ];then
    CPUS=${CPUS-4}
 fi
 
+function dgit_check {
+    GREP=${1-"docker-"}
+    for x in $(ls|grep ${GREP});do pushd ${x};git status -s;popd;done
+}
+
 function d_getip {
    # returns ip of given container, if none returns last containers ip
    LAST_CONT=$(docker ps -l|egrep -v "(Exit \d|^CONTAINER ID)"|awk '{print $1}')
