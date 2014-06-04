@@ -4,6 +4,8 @@ export HOST_SHARE=${HOST_SHARE-/speed/}
 export CPUS=${CPUS-4}
 export DHOST=${DHOST-localhost}
 export MAX_MEMORY=${MAX_MEMORY-125M}
+export NO_CGROUPS=${NO_CGROUPS-1}
+
 if [ ! -f /proc/cpuinfo ];then
    CPUS=${CPUS-4}
 fi
@@ -47,6 +49,11 @@ function eval_docker_version {
       echo 10
       return 0
    fi
+   if [[ "X${DVER}" == X0.11.* ]];then
+      echo 11
+      return 0
+   fi
+
 }
 
 function eval_cpuset {
@@ -62,6 +69,15 @@ function eval_cpuset {
       return 0
    fi
    if [ "X${1}" == "Xelk" ];then
+      if [ ${CNT_CPU} -ge 5 ];then
+         echo 0,1
+         return 0
+      else
+         echo 0
+         return 0
+      fi
+   fi
+   if [ "X${1}" == "Xslurm" ];then
       if [ ${CNT_CPU} -ge 5 ];then
          echo 0,1
          return 0
@@ -139,13 +155,13 @@ function start_dns {
    fi
    DNS="--dns=127.0.0.1"
    if [ "X$(eval_docker_version)" == "X10" ];then
-     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
+     DNS="${DNS} --dns-search=${DNS_DOMAIN}"
    fi
    docker run ${RMODE} -h ${DNS_HOST} --name ${DNS_HOST} \
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      qnib/helixdns \
+      qnib-helixdns \
       ${RCMD}
 }
 
@@ -153,6 +169,8 @@ function start_elk {
    #starts ELK container and links with DNS
    CONT_DEV=${CONT_DEV-0}
    DETACHED=${1-0}
+   CONT_NAME="elk"
+   IMG_NAME="elk"
    if [ ${DETACHED} -eq 0 ];then
       RMODE="-d"
       RCMD=""
@@ -168,28 +186,21 @@ function start_elk {
    if [ "X$(eval_docker_version)" == "X10" ];then
      DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
    fi
-   CONT_NAME="elk"
-   IMG_NAME="elk"
-   WWW_PORT=81
-   ES_PORT=9200
    if [ ${CONT_DEV} -eq 1 ];then
       echo "Starting dev tag"
       CONT_NAME="elk-dev"
       IMG_NAME="elk:dev"
-      WWW_PORT=10081
-      ES_PORT=19200
    fi
    docker run ${RMODE} -h ${CONT_NAME} --name ${CONT_NAME} \
+      --privileged \
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
-      -p ${WWW_PORT}:80 -p ${ES_PORT}:9200 \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      qnib/${IMG_NAME} \
+      qnib-${IMG_NAME} \
       ${RCMD}
 }
 
-function start_graphite {
-   #starts graphite container and links with DNS
+function start_carbon {
    DETACHED=${1-0}
    if [ ${DETACHED} -eq 0 ];then
       RMODE="-d"
@@ -198,7 +209,7 @@ function start_graphite {
       RMODE="-t -i --rm=true"
       RCMD="/bin/bash"
    fi
-   CPUSET=$(eval_cpuset elk)
+   CPUSET=$(eval_cpuset carbon)
    if [ $? -ne 0 ];then
       return 1
    fi
@@ -206,19 +217,37 @@ function start_graphite {
    if [ "X$(eval_docker_version)" == "X10" ];then
      DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
    fi
-   docker run ${RMODE} -h graphite --name graphite \
+   OPTS="--privileged"
+   if [ ${NO_CGROUPS} -ne 0 ];then
+      OPTS="${OPTS} --lxc-conf=\"lxc.cgroup.cpuset.cpus=${CPUSET}\""
+   fi
+   docker run ${RMODE} -h carbon --name carbon \
+      ${OPTS} \
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       -v ${HOST_SHARE}/whisper:/var/lib/carbon/whisper \
-      --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      -p 80:80 \
-      qnib/graphite \
+      qnib-carbon \
       ${RCMD}
 }
 
-function start_slurm {
-   #starts slurm container and links with DNS
-   DETACHED=${1-0}
+function start_function {
+   IMG_PREFIX=${IMG_PREFIX-qnib}
+   CON_NAME=${1}
+   DETACHED=${2-0}
+   OPTS=""
+   if [ ${CON_NAME} == "carbon" ];then
+      OPTS="${OPTS} -v ${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
+   fi
+   for port in ${FORWARD_PORTS};do
+      OPTS="${OPTS} -p ${port}:${port}"
+   done
+   for link in ${CON_LINKED};do
+      upper=$(echo ${link}|awk '{print toupper($0)}')
+      OPTS="${OPTS} --link ${link}:${upper}"
+   done
+   for vol in ${CON_VOL};do
+      OPTS="${OPTS} --volumes-from ${vol}"
+   done
    if [ ${DETACHED} -eq 0 ];then
       RMODE="-d"
       RCMD=""
@@ -226,21 +255,58 @@ function start_slurm {
       RMODE="-t -i --rm=true"
       RCMD="/bin/bash"
    fi
-   CPUSET=$(eval_cpuset elk)
+   CPUSET=$(eval_cpuset ${CON_NAME})
    if [ $? -ne 0 ];then
       return 1
    fi
    DNS="--dns=$(d_getip ${DNS_HOST})"
-   if [ "X$(eval_docker_version)" == "X10" ];then
-     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
+   DNS="${DNS} --dns-search=${DNS_DOMAIN}"
+   OPTS="${OPTS} --privileged"
+   if [ ${NO_CGROUPS} -ne 0 ];then
+      OPTS="${OPTS} --lxc-conf=\"lxc.cgroup.cpuset.cpus=${CPUSET}\""
    fi
-   docker run ${RMODE} -h slurm --name slurm \
+   for MOUNT in ${MOUNTS};do
+      OPTS="${OPTS} -v ${MOUNT}"
+   done
+   docker run ${RMODE} -h ${CON_NAME} --name ${CON_NAME} \
+      ${OPTS} \
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
-      -v ${HOST_SHARE}/chome:/chome \
-      --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      qnib/slurm \
+      ${IMG_PREFIX}-${CON_NAME} \
       ${RCMD}
+}
+
+function start_haproxy {
+   DETACHED=${1-0}
+   FORWARD_PORTS="80 9200"
+   start_function haproxy ${DETACHED}
+}
+
+function start_grafana {
+   DETACHED=${1-0}
+   start_function grafana ${DETACHED}
+}
+
+function start_graphite_api {
+   DETACHED=${1-0}
+   #CON_VOL="carbon"
+   CON_LINKED="carbon"
+   MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
+   start_function graphite_api ${DETACHED}
+}
+
+function start_graphite_web {
+   DETACHED=${1-0}
+   CON_VOL="carbon"
+   CON_LINKED="carbon"
+   MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
+   start_function graphite_web ${DETACHED}
+}
+
+function start_slurm {
+   DETACHED=${1-0}
+   MOUNTS="${HOST_SHARE}/chome:/chome"
+   start_function slurm ${DETACHED}
 }
 
 function start_terminal {
@@ -327,7 +393,7 @@ function start_compute {
       -v ${HOST_SHARE}/scratch:/scratch \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPU_SET}" \
       --memory=${MAX_MEMORY} \
-      qnib/compute \
+      qnib-compute \
       ${RCMD}
 }
 
