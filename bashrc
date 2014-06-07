@@ -15,6 +15,55 @@ function dgit_check {
     for x in $(ls|grep ${GREP});do pushd ${x};git status -s;popd;done
 }
 
+function dgit_clone {
+   echo -n "Where to put the git-directories? [.] "
+   read WORKDIR
+   if [ "X${WORKDIR}" == "X" ];then
+      WORKDIR="./"
+   fi
+   PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
+   PROJECTS="${PROJECTS} grafana graphite-api compute slurm haproxy carbon"
+   for proj in ${PROJECTS};do
+      echo "########## docker-${proj}"
+      DIR="${WORKDIR}/docker-${proj}"
+      if [ -d ${DIR} ];then
+         pushd ${DIR} >/dev/null
+         git pull
+         popd >/dev/null
+      else
+         echo "git clone https://github.com/ChristianKniep/docker-${proj}.git"
+      fi
+   done
+}
+
+function dgit_build {
+   echo -n "Where arethe git-directories? [.] "
+   read WORKDIR
+   if [ "X${WORKDIR}" == "X" ];then
+      WORKDIR="./"
+   fi
+   if [ "X${1}" == "X" ];then
+      PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
+      PROJECTS="${PROJECTS} grafana graphite-api compute slurm haproxy carbon"
+   else
+      PROJECTS=${1}
+   fi
+   for proj in ${PROJECTS};do
+      DIR="${WORKDIR}/docker-${proj}"
+      if [ -d ${DIR} ];then
+         echo "########## build> docker-${proj}"
+         pushd ${DIR} >/dev/null
+         docker build --rm -t qnib-${proj} .
+         EC=$?
+         if [ ${EC} -ne 0 ];then
+            echo "'docker build --rm -t qnib-${proj} .' failed with EC:${EC}"
+            return 1
+         fi
+         popd >/dev/null
+      fi
+      done
+}
+
 function d_getip {
    # returns ip of given container, if none returns last containers ip
    LAST_CONT=$(docker ps -l|egrep -v "(Exit \d|^CONTAINER ID)"|awk '{print $1}')
