@@ -5,6 +5,9 @@ export CPUS=${CPUS-4}
 export DHOST=${DHOST-localhost}
 export MAX_MEMORY=${MAX_MEMORY-125M}
 export NO_CGROUPS=${NO_CGROUPS-1}
+export PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
+export PROJECTS="${PROJECTS} grafana graphite-api slurm compute slurmctld haproxy carbon"
+
 
 if [ ! -f /proc/cpuinfo ];then
    CPUS=${CPUS-4}
@@ -21,8 +24,6 @@ function dgit_clone {
    if [ "X${WORKDIR}" == "X" ];then
       WORKDIR="./"
    fi
-   PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
-   PROJECTS="${PROJECTS} grafana graphite-api compute slurm haproxy carbon"
    for proj in ${PROJECTS};do
       echo "########## docker-${proj}"
       DIR="${WORKDIR}/docker-${proj}"
@@ -31,7 +32,7 @@ function dgit_clone {
          git pull
          popd >/dev/null
       else
-         echo "git clone https://github.com/ChristianKniep/docker-${proj}.git"
+         git clone https://github.com/ChristianKniep/docker-${proj}.git
       fi
    done
 }
@@ -42,24 +43,24 @@ function dgit_build {
    if [ "X${WORKDIR}" == "X" ];then
       WORKDIR="./"
    fi
-   if [ "X${1}" == "X" ];then
-      PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
-      PROJECTS="${PROJECTS} grafana graphite-api compute slurm haproxy carbon"
+   if [ "X${1}" != "X" ];then
+      MY_PROJECTS=$*
    else
-      PROJECTS=${1}
+      MY_PROJECTS=${PROJECTS}
    fi
-   for proj in ${PROJECTS};do
+   for proj in ${MY_PROJECTS};do
       DIR="${WORKDIR}/docker-${proj}"
       if [ -d ${DIR} ];then
-         echo "########## build> docker-${proj}"
+         echo "########## build> docker/${proj}"
          pushd ${DIR} >/dev/null
-         docker build --rm -t qnib-${proj} .
+         docker build --rm -t qnib/${proj} .
          EC=$?
          if [ ${EC} -ne 0 ];then
-            echo "'docker build --rm -t qnib-${proj} .' failed with EC:${EC}"
+            echo "'docker build --rm -t qnib/${proj} .' failed with EC:${EC}"
             return 1
          fi
          popd >/dev/null
+         sleep 2
       fi
       done
 }
@@ -79,7 +80,7 @@ function d_getip {
 function d_pullall {
    echo "#########  Starting download of QNIBTerminal images"
    echo "###### $(date)"
-   for IMG in fd20 terminal helixdns elk slurm compute;do
+   for IMG in ${PROJECTS};do
       echo "### pulling qnib/${IMG}"
       docker pull qnib/${IMG}
    done
@@ -210,7 +211,7 @@ function start_dns {
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      qnib-helixdns \
+      qnib/helixdns \
       ${RCMD}
 }
 
@@ -245,7 +246,7 @@ function start_elk {
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      qnib-${IMG_NAME} \
+      qnib/${IMG_NAME} \
       ${RCMD}
 }
 
@@ -275,13 +276,14 @@ function start_carbon {
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
       -v ${HOST_SHARE}/whisper:/var/lib/carbon/whisper \
-      qnib-carbon \
+      qnib/carbon \
       ${RCMD}
 }
 
 function start_function {
    IMG_PREFIX=${IMG_PREFIX-qnib}
-   CON_NAME=${1}
+   IMG_NAME=${1}
+   CON_NAME=${3-${IMG_NAME}}
    DETACHED=${2-0}
    OPTS=""
    if [ ${CON_NAME} == "carbon" ];then
@@ -321,7 +323,7 @@ function start_function {
       ${OPTS} \
       ${DNS} \
       -v ${HOST_SHARE}/scratch:/scratch \
-      ${IMG_PREFIX}-${CON_NAME} \
+      ${IMG_PREFIX}/${IMG_NAME} \
       ${RCMD}
 }
 
@@ -341,7 +343,7 @@ function start_graphite_api {
    #CON_VOL="carbon"
    CON_LINKED="carbon"
    MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
-   start_function graphite_api ${DETACHED}
+   start_function graphite-api ${DETACHED}
 }
 
 function start_graphite_web {
@@ -349,13 +351,33 @@ function start_graphite_web {
    CON_VOL="carbon"
    CON_LINKED="carbon"
    MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
-   start_function graphite_web ${DETACHED}
+   start_function graphite-web ${DETACHED}
 }
 
-function start_slurm {
+function start_slurmctld {
    DETACHED=${1-0}
    MOUNTS="${HOST_SHARE}/chome:/chome"
-   start_function slurm ${DETACHED}
+   start_function slurmctld ${DETACHED}
+}
+
+function start_comp {
+   #starts slurm container and links with DNS
+   IMG_NAME=compute
+   CON_NAME=${1}
+   if [[ "X${1}" != Xcompute* ]] ; then
+      echo "1st argument must be 'compute\d+'"
+      return 1
+   else
+      if [ $(docker ps|egrep -c "${CONT_NAME}\s+$") -eq 1 ];then
+         echo "Container already started?!"
+         return 1
+      fi
+   fi
+   DETACHED=${2-0}
+   OPTS="--memory=${MAX_MEMORY}"
+   MOUNTS="${HOST_SHARE}/chome:/chome"
+   start_function ${IMG_NAME} ${DETACHED} ${CON_NAME}
+
 }
 
 function start_terminal {
@@ -442,7 +464,7 @@ function start_compute {
       -v ${HOST_SHARE}/scratch:/scratch \
       --lxc-conf="lxc.cgroup.cpuset.cpus=${CPU_SET}" \
       --memory=${MAX_MEMORY} \
-      qnib-compute \
+      qnib/compute \
       ${RCMD}
 }
 
