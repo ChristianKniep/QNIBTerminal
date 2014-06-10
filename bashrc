@@ -335,6 +335,7 @@ function start_haproxy {
 
 function start_grafana {
    DETACHED=${1-0}
+   FORWARD_PORTS=""
    start_function grafana ${DETACHED}
 }
 
@@ -342,6 +343,7 @@ function start_graphite_api {
    DETACHED=${1-0}
    #CON_VOL="carbon"
    CON_LINKED="carbon"
+   FORWARD_PORTS=""
    MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
    start_function graphite-api ${DETACHED}
 }
@@ -350,6 +352,7 @@ function start_graphite_web {
    DETACHED=${1-0}
    CON_VOL="carbon"
    CON_LINKED="carbon"
+   FORWARD_PORTS=""
    MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
    start_function graphite-web ${DETACHED}
 }
@@ -357,6 +360,7 @@ function start_graphite_web {
 function start_slurmctld {
    DETACHED=${1-0}
    MOUNTS="${HOST_SHARE}/chome:/chome"
+   FORWARD_PORTS=""
    start_function slurmctld ${DETACHED}
 }
 
@@ -364,6 +368,7 @@ function start_comp {
    #starts slurm container and links with DNS
    IMG_NAME=compute
    CON_NAME=${1}
+   FORWARD_PORTS=""
    if [[ "X${1}" != Xcompute* ]] ; then
       echo "1st argument must be 'compute\d+'"
       return 1
@@ -376,6 +381,7 @@ function start_comp {
    DETACHED=${2-0}
    OPTS="--memory=${MAX_MEMORY}"
    MOUNTS="${HOST_SHARE}/chome:/chome"
+   FORWARD_PORTS=""
    start_function ${IMG_NAME} ${DETACHED} ${CON_NAME}
 
 }
