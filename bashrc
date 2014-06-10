@@ -8,11 +8,48 @@ export NO_CGROUPS=${NO_CGROUPS-1}
 export PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
 export PROJECTS="${PROJECTS} grafana graphite-api slurm compute slurmctld haproxy carbon"
 
+export CONTAINERS="dns elk carbon graphite-web graphite-api grafana haproxy slurmctld"
 
 if [ ! -f /proc/cpuinfo ];then
    CPUS=${CPUS-4}
 fi
 
+function start_qnibterminal {
+   # starts the complete stack
+   if [ "X${1}" != "X" ];then
+      MY_CONT=$*
+   else
+      MY_CONT=${CONTAINERS}
+   fi
+   for cont in ${MY_CONT};do
+      echo -n "#### Start ${cont}   "
+      if [ ${cont} == "dns" ];then
+         IMG_NAME="helixdns"
+      else
+         IMG_NAME=${cont}
+      fi
+      if [ $(docker ps|egrep -c " qnib/${IMG_NAME}\:") -ne 0 ];then
+         echo "container already running..."
+         continue
+      fi
+      CONT_ID=$(eval "start_$(echo ${cont}|sed -e 's/-/_/g')")
+      EC=$?
+      if [ $(docker ps|egrep -c " qnib/${IMG_NAME}\:") -ne 1 ];then
+         echo "container was not started... :( EC: ${EC}"
+         return 1
+      fi
+      echo "EC: $? ID: ${CONT_ID}"
+      if [ ${EC} -ne 0 ];then
+         return ${EC}
+      fi
+      if [ "X${QNIBT_DEBUG}" != "X" ];then
+         echo "[press <enter> to continue]"
+         read
+      else
+         sleep 5
+      fi
+   done
+}
 function dgit_check {
     GREP=${1-"docker-"}
     for x in $(ls|grep ${GREP});do pushd ${x};git status -s;popd;done
@@ -77,35 +114,6 @@ function d_getip {
    fi
 }
 
-function d_pullall {
-   echo "#########  Starting download of QNIBTerminal images"
-   echo "###### $(date)"
-   for IMG in ${PROJECTS};do
-      echo "### pulling qnib/${IMG}"
-      docker pull qnib/${IMG}
-   done
-   echo "###### $(date)"
-   echo "######### END"
-}
-
-function eval_docker_version {
-   #checks client/server version
-   DVER=$(docker version |egrep "(Client|Server) version:"|awk -F\: '{print $2}'|uniq|sed -e 's/ //g')
-   if [[ "X${DVER}" == X0\.9\.* ]];then
-      echo 9
-      return 0
-   fi
-   if [[ "X${DVER}" == X0.10.* ]];then
-      echo 10
-      return 0
-   fi
-   if [[ "X${DVER}" == X0.11.* ]];then
-      echo 11
-      return 0
-   fi
-
-}
-
 function eval_cpuset {
    # returns cpuset.cpus for different types
    if [ ${DHOST} == "localhost" ];then
@@ -114,7 +122,7 @@ function eval_cpuset {
       fi
    fi
    CNT_CPU=${2-${CPUS}}
-   if [ "X${1}" == "Xdns" ];then
+   if [ "X${1}" == "Xhelixdns" ];then
       echo 0
       return 0
    fi
@@ -186,98 +194,10 @@ function eval_cpuset {
          echo "Not enough CPU corse 2.0 (CNT_CPU:${CNT_CPU} || desired CPU_NR:${CPU_NR})"
          return 1
       fi
-   fi
-}
-
-function start_dns {
-   #starts the first container of QNIBTerminal
-   DETACHED=${1-0}
-   if [ ${DETACHED} -eq 0 ];then
-      RMODE="-d"
-      RCMD=""
    else
-      RMODE="-t -i --rm=true"
-      RCMD="/bin/bash"
+      echo 0
+      return 0
    fi
-   CPUSET=$(eval_cpuset dns)
-   if [ $? -ne 0 ];then
-      return 1
-   fi
-   DNS="--dns=127.0.0.1"
-   if [ "X$(eval_docker_version)" == "X10" ];then
-     DNS="${DNS} --dns-search=${DNS_DOMAIN}"
-   fi
-   docker run ${RMODE} -h ${DNS_HOST} --name ${DNS_HOST} \
-      ${DNS} \
-      -v ${HOST_SHARE}/scratch:/scratch \
-      --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      qnib/helixdns \
-      ${RCMD}
-}
-
-function start_elk {
-   #starts ELK container and links with DNS
-   CONT_DEV=${CONT_DEV-0}
-   DETACHED=${1-0}
-   CONT_NAME="elk"
-   IMG_NAME="elk"
-   if [ ${DETACHED} -eq 0 ];then
-      RMODE="-d"
-      RCMD=""
-   else
-      RMODE="-t -i --rm=true"
-      RCMD="/bin/bash"
-   fi
-   CPUSET=$(eval_cpuset elk)
-   if [ $? -ne 0 ];then
-      return 1
-   fi
-   DNS="--dns=$(d_getip ${DNS_HOST})"
-   if [ "X$(eval_docker_version)" == "X10" ];then
-     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
-   fi
-   if [ ${CONT_DEV} -eq 1 ];then
-      echo "Starting dev tag"
-      CONT_NAME="elk-dev"
-      IMG_NAME="elk:dev"
-   fi
-   docker run ${RMODE} -h ${CONT_NAME} --name ${CONT_NAME} \
-      --privileged \
-      ${DNS} \
-      -v ${HOST_SHARE}/scratch:/scratch \
-      --lxc-conf="lxc.cgroup.cpuset.cpus=${CPUSET}" \
-      qnib/${IMG_NAME} \
-      ${RCMD}
-}
-
-function start_carbon {
-   DETACHED=${1-0}
-   if [ ${DETACHED} -eq 0 ];then
-      RMODE="-d"
-      RCMD=""
-   else
-      RMODE="-t -i --rm=true"
-      RCMD="/bin/bash"
-   fi
-   CPUSET=$(eval_cpuset carbon)
-   if [ $? -ne 0 ];then
-      return 1
-   fi
-   DNS="--dns=$(d_getip ${DNS_HOST})"
-   if [ "X$(eval_docker_version)" == "X10" ];then
-     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
-   fi
-   OPTS="--privileged"
-   if [ ${NO_CGROUPS} -ne 0 ];then
-      OPTS="${OPTS} --lxc-conf=\"lxc.cgroup.cpuset.cpus=${CPUSET}\""
-   fi
-   docker run ${RMODE} -h carbon --name carbon \
-      ${OPTS} \
-      ${DNS} \
-      -v ${HOST_SHARE}/scratch:/scratch \
-      -v ${HOST_SHARE}/whisper:/var/lib/carbon/whisper \
-      qnib/carbon \
-      ${RCMD}
 }
 
 function start_function {
@@ -285,7 +205,7 @@ function start_function {
    IMG_NAME=${1}
    CON_NAME=${3-${IMG_NAME}}
    DETACHED=${2-0}
-   OPTS=""
+   OPTS="${OPTS}"
    if [ ${CON_NAME} == "carbon" ];then
       OPTS="${OPTS} -v ${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
    fi
@@ -299,73 +219,126 @@ function start_function {
    for vol in ${CON_VOL};do
       OPTS="${OPTS} --volumes-from ${vol}"
    done
-   if [ ${DETACHED} -eq 0 ];then
-      RMODE="-d"
-      RCMD=""
-   else
-      RMODE="-t -i --rm=true"
-      RCMD="/bin/bash"
-   fi
    CPUSET=$(eval_cpuset ${CON_NAME})
    if [ $? -ne 0 ];then
       return 1
    fi
-   DNS="--dns=$(d_getip ${DNS_HOST})"
+   if [ "${CON_NAME}" != "dns" ];then
+      DNS="--dns=$(d_getip ${DNS_HOST})"
+   else
+      DNS="--dns=127.0.0.1"
+   fi
    DNS="${DNS} --dns-search=${DNS_DOMAIN}"
    OPTS="${OPTS} --privileged"
    if [ ${NO_CGROUPS} -ne 0 ];then
-      OPTS="${OPTS} --lxc-conf=\"lxc.cgroup.cpuset.cpus=${CPUSET}\""
+      OPTS="${OPTS} --lxc-conf=lxc.cgroup.cpuset.cpus=${CPUSET}"
    fi
    for MOUNT in ${MOUNTS};do
       OPTS="${OPTS} -v ${MOUNT}"
    done
-   docker run ${RMODE} -h ${CON_NAME} --name ${CON_NAME} \
-      ${OPTS} \
-      ${DNS} \
-      -v ${HOST_SHARE}/scratch:/scratch \
-      ${IMG_PREFIX}/${IMG_NAME} \
-      ${RCMD}
+   if [ ${DETACHED} -eq 0 ];then
+      echo $(docker run -d -h ${CON_NAME} --name ${CON_NAME} \
+         ${OPTS} \
+         ${DNS} \
+         -v ${HOST_SHARE}/scratch:/scratch \
+         ${IMG_PREFIX}/${IMG_NAME}:latest)
+      else
+         docker run -t -i --rm -h ${CON_NAME} --name ${CON_NAME} \
+            ${OPTS} \
+            ${DNS} \
+            -v ${HOST_SHARE}/scratch:/scratch \
+            ${IMG_PREFIX}/${IMG_NAME}:latest \
+            /bin/bash
+      fi
+}
+
+function start_dns {
+   #starts the first container of QNIBTerminal
+   CON_VOL=""
+   CON_LINKED=""
+   DETACHED=${1-0}
+   FORWARD_PORTS=""
+   OPTS=""
+   MOUNTS=""
+   start_function helixdns ${DETACHED} dns
+
+}
+function start_elk {
+   #starts the first container of QNIBTerminal
+   CON_VOL=""
+   CON_LINKED=""
+   DETACHED=${1-0}
+   FORWARD_PORTS=""
+   OPTS="--privileged"
+   MOUNTS=""
+   start_function elk ${DETACHED}
+}
+
+function start_carbon {
+   #starts the first container of QNIBTerminal
+   CON_VOL=""
+   CON_LINKED=""
+   DETACHED=${1-0}
+   FORWARD_PORTS=""
+   OPTS="--privileged"
+   MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
+   start_function carbon ${DETACHED}
 }
 
 function start_haproxy {
+   CON_VOL=""
+   CON_LINKED=""
    DETACHED=${1-0}
    FORWARD_PORTS="80 9200"
+   MOUNTS=""
+   OPTS=""
    start_function haproxy ${DETACHED}
 }
 
 function start_grafana {
+   CON_VOL=""
+   CON_LINKED=""
    DETACHED=${1-0}
    FORWARD_PORTS=""
+   MOUNTS=""
+   OPTS=""
    start_function grafana ${DETACHED}
 }
 
 function start_graphite_api {
+   CON_VOL=""
+   CON_LINKED=""
    DETACHED=${1-0}
-   #CON_VOL="carbon"
-   CON_LINKED="carbon"
    FORWARD_PORTS=""
    MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
+   OPTS=""
    start_function graphite-api ${DETACHED}
 }
 
 function start_graphite_web {
-   DETACHED=${1-0}
    CON_VOL="carbon"
    CON_LINKED="carbon"
+   DETACHED=${1-0}
    FORWARD_PORTS=""
    MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
+   OPTS=""
    start_function graphite-web ${DETACHED}
 }
 
 function start_slurmctld {
+   CON_VOL=""
+   CON_LINKED=""
    DETACHED=${1-0}
-   MOUNTS="${HOST_SHARE}/chome:/chome"
    FORWARD_PORTS=""
+   MOUNTS="${HOST_SHARE}/chome:/chome"
+   OPTS=""
    start_function slurmctld ${DETACHED}
 }
 
 function start_comp {
    #starts slurm container and links with DNS
+   CON_VOL=""
+   CON_LINKED=""
    IMG_NAME=compute
    CON_NAME=${1}
    FORWARD_PORTS=""
@@ -383,33 +356,6 @@ function start_comp {
    MOUNTS="${HOST_SHARE}/chome:/chome"
    FORWARD_PORTS=""
    start_function ${IMG_NAME} ${DETACHED} ${CON_NAME}
-
-}
-
-function start_terminal {
-   #starts terminal container and links with DNS
-   LXC_CSET=${1-X}
-   LXC_OPTS=""
-   if [ "X${LXC_CSET}" != "XX" ];then
-      LXC_OPTS="${LXC_OPTS} --lxc-conf=lxc.cgroup.cpuset.cpus=${LXC_CSET}"
-   fi
-   LXC_CSHARE=${2-X}
-   if [ "X${LXC_CSHARE}" != "XX" ];then
-      LXC_OPTS="${LXC_OPTS} --lxc-conf=lxc.cgroup.cpu.shares=${LXC_CSHARE}"
-   fi
-   RMODE="-t -i --rm=true"
-   RCMD="/bin/bash"
-   DNS="--dns=$(d_getip ${DNS_HOST})"
-   if [ "X$(eval_docker_version)" == "X10" ];then
-     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
-   fi
-   docker run ${RMODE} \
-      ${DNS} \
-      -v ${HOST_SHARE}/scratch:/scratch \
-      -v ${HOST_SHARE}/chome:/chome \
-      ${LXC_OPTS} \
-      qnib/terminal:latest \
-      /bin/bash
 }
 
 function start_container {
@@ -425,9 +371,6 @@ function start_container {
    RMODE="-t -i --rm=true"
    RCMD="/bin/bash"
    DNS="--dns=$(d_getip dns)"
-   if [ "X$(eval_docker_version)" == "X10" ];then
-     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
-   fi
    docker run ${RMODE} \
       -v ${HOST_SHARE}/scratch:/scratch \
       -v ${HOST_SHARE}/chome:/chome \
@@ -435,77 +378,19 @@ function start_container {
       ${IMG_NAME} \
       /bin/bash
 }
-
-function start_compute {
-   #starts slurm container and links with DNS
-   CONT_NAME=${1}
-   if [[ "X${1}" != Xcompute* ]] ; then
-      echo "1st argument must be 'compute\d+'"
-      return 1
-   else
-      if [ $(docker ps|egrep -c "${CONT_NAME}\s+$") -eq 1 ];then
-         echo "Container already started?!"
-         return 1
-      fi
-   fi
-   DETACHED=${2-0}
-   if [ ${DETACHED} -eq 0 ];then
-      RMODE="-d"
-      RCMD=""
-   else
-      RMODE="-t -i --rm=true"
-      RCMD="/bin/bash"
-   fi
-   CPUSET=$(eval_cpuset ${CONT_NAME})
-   if [ $? -ne 0 ];then
-      return 1
-   fi
-   CPU_SET=${3-${CPUSET}}
-   DNS="--dns=$(d_getip ${DNS_HOST})"
-   if [ "X$(eval_docker_version)" == "X10" ];then
-     DNS=" ${DNS} --dns-search=${DNS_DOMAIN}"
-   fi
-   docker run ${RMODE} -h ${CONT_NAME} --name ${CONT_NAME} \
-      ${DNS} \
-      -v ${HOST_SHARE}/scratch:/scratch \
-      --lxc-conf="lxc.cgroup.cpuset.cpus=${CPU_SET}" \
-      --memory=${MAX_MEMORY} \
-      qnib/compute \
-      ${RCMD}
-}
-
-function restart_compute {
-   #restarts compute container
-   CONT_NAME=${1}
-   if [[ "X${1}" != Xcompute* ]] ; then
-      echo "1st argument must be 'compute\d+'"
-      return 1
-   else
-      if [ $(docker ps|egrep -c "${CONT_NAME}\s+$") -eq 0 ];then
-         echo "Container not running...?"
-         return 1
-      fi
-   fi
-   docker stop ${CONT_NAME}
-   EC=$?
-   if [ ${EC} -ne 0 ];then
-      echo "Stop failed... "
-      return 1
-   fi
-   sleep 1
-   docker start ${CONT_NAME}
-   EC=$?
-   if [ ${EC} -ne 0 ];then
-      echo "Start failed... "
-      return 1
-   fi
+function d_shutdown {
+   #removes exited container
+   NOT=${1-0}
+   for cont in $(docker ps -a|grep Up|awk '{print $1}'|xargs);do
+      docker stop ${cont}
+   done
 }
 
 function d_garbage_collect {
    #removes exited container
    NOT=${1-0}
    if [ "X${NOT}" == "X0" ];then
-      docker rm $(docker ps -a|grep Exit|awk '{print $1}'|xargs)
+      docker rm $(docker ps -a|grep -v Up|grep -v CONTAINER|awk '{print $1}'|xargs)
    else
       for cont in $(docker ps -a|grep Exit|grep ${NOT}|awk '{print $1}'|xargs);do
          echo -n "${cont} [n/Y] "
@@ -515,5 +400,4 @@ function d_garbage_collect {
          fi
       done
    fi
-
 }
