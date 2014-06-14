@@ -31,6 +31,7 @@ function start_qnibterminal {
       if [ ${cont} == "dns" ];then
          IMG_NAME="helixdns"
       elif [ ${cont} == "compute0" ];then
+         sleep 5
          IMG_NAME="compute"
       else
          IMG_NAME=${cont}
