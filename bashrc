@@ -285,8 +285,8 @@ function start_graphite_api {
 }
 
 function start_graphite_web {
-   CON_VOL="carbon"
-   CON_LINKED="carbon"
+   CON_VOL=""
+   CON_LINKED=""
    DETACHED=${1-0}
    FORWARD_PORTS=""
    MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
