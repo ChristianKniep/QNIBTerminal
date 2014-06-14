@@ -258,7 +258,7 @@ function start_haproxy {
    CON_VOL=""
    CON_LINKED=""
    DETACHED=${1-0}
-   FORWARD_PORTS="80 9200"
+   FORWARD_PORTS="80 9200 2222"
    MOUNTS=""
    OPTS=""
    start_function haproxy ${DETACHED}
