@@ -8,11 +8,15 @@ export NO_CGROUPS=${NO_CGROUPS-1}
 export PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
 export PROJECTS="${PROJECTS} grafana graphite-api slurm compute slurmctld haproxy carbon"
 
-export CONTAINERS="dns elk carbon graphite-web graphite-api grafana haproxy slurmctld"
+export CONTAINERS="dns elk carbon graphite-web graphite-api grafana slurmctld compute0 haproxy"
 
 if [ ! -f /proc/cpuinfo ];then
    CPUS=${CPUS-4}
 fi
+
+function ssh_compute0 {
+   ssh -l cluser -p 2222 ${DHOST}
+}
 
 function start_qnibterminal {
    # starts the complete stack
@@ -26,6 +30,8 @@ function start_qnibterminal {
       echo -n "#### Start ${cont}   "
       if [ ${cont} == "dns" ];then
          IMG_NAME="helixdns"
+      elif [ ${cont} == "compute0" ];then
+         IMG_NAME="compute"
       else
          IMG_NAME=${cont}
       fi
@@ -51,13 +57,8 @@ function start_qnibterminal {
          sleep 2
       fi
    done
-   if [ ${GLOBAL_EC} -eq 0 ];then
-      sleep 10
-      echo "#### Start first compute-node"
-      start_comp compute0
-   fi
-
 }
+
 function dgit_check {
     GREP=${1-"docker-"}
     for x in $(ls|grep ${GREP});do pushd ${x};git status -s;popd;done
@@ -304,6 +305,9 @@ function start_slurmctld {
    start_function slurmctld ${DETACHED}
 }
 
+function start_compute0 {
+   start_comp compute0
+}
 function start_comp {
    #starts slurm container and links with DNS
    CON_VOL=""
