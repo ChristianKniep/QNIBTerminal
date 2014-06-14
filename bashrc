@@ -21,6 +21,7 @@ function start_qnibterminal {
    else
       MY_CONT=${CONTAINERS}
    fi
+   GLOBAL_EC=0
    for cont in ${MY_CONT};do
       echo -n "#### Start ${cont}   "
       if [ ${cont} == "dns" ];then
@@ -38,6 +39,7 @@ function start_qnibterminal {
          echo "container was not started... :( EC: ${EC}"
          return 1
       fi
+      GLOBAL_EC=$(echo "${GLOBAL_EC}+${EC}"|bc)
       echo "EC: $? ID: ${CONT_ID}"
       if [ ${EC} -ne 0 ];then
          return ${EC}
@@ -46,9 +48,15 @@ function start_qnibterminal {
          echo "[press <enter> to continue]"
          read
       else
-         sleep 5
+         sleep 2
       fi
    done
+   if [ ${GLOBAL_EC} -eq 0 ];then
+      sleep 10
+      echo "#### Start first compute-node"
+      start_comp compute0
+   fi
+
 }
 function dgit_check {
     GREP=${1-"docker-"}
@@ -116,88 +124,43 @@ function d_getip {
 
 function eval_cpuset {
    # returns cpuset.cpus for different types
-   if [ ${DHOST} == "localhost" ];then
-      if [ -f /proc/cpuinfo ];then
-         CPUS=$(grep -c ^processor /proc/cpuinfo)
-      fi
-   fi
-   CNT_CPU=${2-${CPUS}}
-   if [ "X${1}" == "Xhelixdns" ];then
-      echo 0
-      return 0
-   fi
+   LAST_SERVICE_CPUID=${2-0}
    if [ "X${1}" == "Xelk" ];then
-      if [ ${CNT_CPU} -ge 5 ];then
+      if [ ${LAST_SERVICE_CPUID} -eq 2 ];then
          echo 0,1
-         return 0
-      else
-         echo 0
          return 0
       fi
    fi
-   if [ "X${1}" == "Xslurm" ];then
-      if [ ${CNT_CPU} -ge 5 ];then
+   if [[ "X${1}" == Xgraphite* ]];then
+      if [ ${LAST_SERVICE_CPUID} -eq 2 ];then
          echo 0,1
-         return 0
-      else
-         echo 0
-         return 0
-      fi
-   fi
-   if [ "X${1}" == "Xgraphite" ];then
-      if [ ${CNT_CPU} -ge 5 ];then
-         echo 2,3
-         return 0
-      else
-         echo 1
          return 0
       fi
    fi
    if [[ "X${1}" == Xcompute* ]] ; then
-      if [[ ${1} == compute[0-9] ]];then
-         if [ ${CNT_CPU} -ge 5 ];then
-            echo 4
-            return 0
-         else
-            echo 2
-            return 0
-         fi
-      fi
-      if [[ ${1} == compute1[0-9] ]];then
-         if [ ${CNT_CPU} -ge 5 ];then
-            echo 5
-            return 0
-         else
-            echo 3
-            return 0
-         fi
-      fi
-      if [[ ${1} == compute2[0-9] ]];then
-         if [ ${CNT_CPU} -ge 6 ];then
-            echo 6
-            return 0
-         fi
-         if [ ${CNT_CPU} -ge 4 ];then
-            echo 4
-            return 0
-         else
-            echo "Not enough CPU corse"
-            return 1
-         fi
-      fi
-      COMP_NR=$(echo ${1}|sed -e 's/compute//')
-      CPU_NR=$(echo "(${COMP_NR}/10) + 3"|bc)
-      if [ ${CNT_CPU} -ge ${CPU_NR} ];then
-         echo ${CPU_NR}
+      if [ $(echo "${1}" |egrep -c "compute([0-9]|1[0-5])$") -eq 1 ];then
+         echo "1 + ${LAST_SERVICE_CPUID}"|bc
          return 0
-      else
-         echo "Not enough CPU corse 2.0 (CNT_CPU:${CNT_CPU} || desired CPU_NR:${CPU_NR})"
-         return 1
       fi
-   else
-      echo 0
-      return 0
+      if [ $(echo "${1}" |egrep -c "compute(1[6-9]|3[0-1])$") -eq 1 ];then
+         echo "2 + ${LAST_SERVICE_CPUID}"|bc
+         return 0
+      fi
+      if [ $(echo "${1}" |egrep -c "compute(3[2-9]|4[0-7])$") -eq 1 ];then
+         echo "3 + ${LAST_SERVICE_CPUID}"|bc
+         return 0
+      fi
+      if [ $(echo "${1}" |egrep -c "compute(4[8-9]|6[0-3])$") -eq 1 ];then
+         echo "4 + ${LAST_SERVICE_CPUID}"|bc
+         return 0
+      fi
+      if [ $(echo "${1}" |egrep -c "compute(6[4-9]|7[0-9])$") -eq 1 ];then
+         echo "5 + ${LAST_SERVICE_CPUID}"|bc
+         return 0
+      fi
    fi
+   echo 0
+   return 0
 }
 
 function start_function {
@@ -240,12 +203,18 @@ function start_function {
       echo $(docker run -d -h ${CON_NAME} --name ${CON_NAME} \
          ${OPTS} \
          ${DNS} \
+         -v /dev/null:/dev/null -v /dev/urandom:/dev/urandom \
+         -v /dev/random:/dev/random -v /dev/full:/dev/full \
+         -v /dev/zero:/dev/zero \
          -v ${HOST_SHARE}/scratch:/scratch \
          ${IMG_PREFIX}/${IMG_NAME}:latest)
       else
          docker run -t -i --rm -h ${CON_NAME} --name ${CON_NAME} \
             ${OPTS} \
             ${DNS} \
+            -v /dev/null:/dev/null -v /dev/urandom:/dev/urandom \
+            -v /dev/random:/dev/random -v /dev/full:/dev/full \
+            -v /dev/zero:/dev/zero \
             -v ${HOST_SHARE}/scratch:/scratch \
             ${IMG_PREFIX}/${IMG_NAME}:latest \
             /bin/bash
@@ -346,7 +315,7 @@ function start_comp {
       echo "1st argument must be 'compute\d+'"
       return 1
    else
-      if [ $(docker ps|egrep -c "${CONT_NAME}\s+$") -eq 1 ];then
+      if [ $(docker ps|egrep -c "${CON_NAME}\s+$") -eq 1 ];then
          echo "Container already started?!"
          return 1
       fi
