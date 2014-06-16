@@ -127,7 +127,9 @@ function d_getip {
 
 function eval_cpuset {
    # returns cpuset.cpus for different types
-   LAST_SERVICE_CPUID=${2-0}
+   if [ "X${LAST_SERVICE_CPUID}" == "X" ];then
+      LAST_SERVICE_CPUID=${2-0}
+   fi
    if [ "X${1}" == "Xelk" ];then
       if [ ${LAST_SERVICE_CPUID} -eq 2 ];then
          echo 0,1
@@ -141,26 +143,9 @@ function eval_cpuset {
       fi
    fi
    if [[ "X${1}" == Xcompute* ]] ; then
-      if [ $(echo "${1}" |egrep -c "compute([0-9]|1[0-5])$") -eq 1 ];then
-         echo "1 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
-      if [ $(echo "${1}" |egrep -c "compute(1[6-9]|3[0-1])$") -eq 1 ];then
-         echo "2 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
-      if [ $(echo "${1}" |egrep -c "compute(3[2-9]|4[0-7])$") -eq 1 ];then
-         echo "3 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
-      if [ $(echo "${1}" |egrep -c "compute(4[8-9]|6[0-3])$") -eq 1 ];then
-         echo "4 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
-      if [ $(echo "${1}" |egrep -c "compute(6[4-9]|7[0-9])$") -eq 1 ];then
-         echo "5 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
+      comp_id=$(echo ${1} | sed 's/compute\([0-9]\+\)/\1/')
+      echo "(${comp_id} / 16) + ${LAST_SERVICE_CPUID}"|bc
+      return 0
    fi
    echo 0
    return 0
