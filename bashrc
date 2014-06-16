@@ -62,7 +62,8 @@ function start_qnibterminal {
 
 function dgit_check {
     GREP=${1-"docker-"}
-    for x in $(ls|grep ${GREP});do pushd ${x};git status -s;popd;done
+    #for x in $(ls|grep ${GREP});do pushd ${x};git status -s;popd;done
+    for x in ${PROJECTS};do pushd docker-${x};git status -s;popd;done
 }
 
 function dgit_clone {
