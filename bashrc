@@ -235,6 +235,16 @@ function start_elk {
    start_function elk ${DETACHED}
 }
 
+function start_qnibng {
+   CON_VOL=""
+   CON_LINKED=""
+   DETACHED=${1-0}
+   FORWARD_PORTS=""
+   OPTS="--privileged -v /dev/infiniband/:/dev/infiniband/"
+   MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
+   start_function qnibng ${DETACHED}
+}
+
 function start_carbon {
    #starts the first container of QNIBTerminal
    CON_VOL=""
