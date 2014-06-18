@@ -125,6 +125,11 @@ function d_getip {
    fi
 }
 
+function d_getcpu {
+   echo -n "${1}   "
+   docker inspect -f '{{ .HostConfig.LxcConf }}' ${1}|sed 's/.*Value\:\([0-9]\+\)*.*/\1/'
+}
+
 function eval_cpuset {
    # returns cpuset.cpus for different types
    if [ "X${LAST_SERVICE_CPUID}" == "X" ];then
@@ -171,6 +176,7 @@ function start_function {
       OPTS="${OPTS} --volumes-from ${vol}"
    done
    CPUSET=$(eval_cpuset ${CON_NAME})
+   #echo "eval_cpuset ${CON_NAME} = ${CPUSET}"
    if [ $? -ne 0 ];then
       return 1
    fi
@@ -181,9 +187,7 @@ function start_function {
    fi
    DNS="${DNS} --dns-search=${DNS_DOMAIN}"
    OPTS="${OPTS} --privileged"
-   if [ ${NO_CGROUPS} -ne 0 ];then
-      OPTS="${OPTS} --lxc-conf=lxc.cgroup.cpuset.cpus=${CPUSET}"
-   fi
+   OPTS="${OPTS} --lxc-conf=lxc.cgroup.cpuset.cpus=${CPUSET}"
    for MOUNT in ${MOUNTS};do
       OPTS="${OPTS} -v ${MOUNT}"
    done
@@ -295,6 +299,15 @@ function start_slurmctld {
 function start_compute0 {
    start_comp compute0
 }
+
+function start_computes {
+   for comp in $*;do echo -n "${comp}   "; start_comp ${comp};sleep 1;done
+}
+
+function d_getcpus {
+   for comp in $*;do d_getcpu ${comp};done
+}
+
 function start_comp {
    #starts slurm container and links with DNS
    CON_VOL=""
@@ -320,23 +333,13 @@ function start_comp {
 
 function start_container {
    #starts given image and links with DNS
-   IMG_NAME=${1-X}
-   if [ "X${IMG_NAME}" == "XX" ];then
-      echo "No image name given"
-      return 1
-   fi
-   LXC_CSET=${2-0}
-   echo "Pin to CPU '${LXC_CSET}'..."
-   LXC_OPTS=" --lxc-conf=lxc.cgroup.cpuset.cpus=${LXC_CSET}"
-   RMODE="-t -i --rm=true"
-   RCMD="/bin/bash"
-   DNS="--dns=$(d_getip dns)"
-   docker run ${RMODE} \
-      -v ${HOST_SHARE}/scratch:/scratch \
-      -v ${HOST_SHARE}/chome:/chome \
-      ${LXC_OPTS} \
-      ${IMG_NAME} \
-      /bin/bash
+   CON_VOL=""
+   CON_LINKED=""
+   DETACHED=${1-0}
+   FORWARD_PORTS=""
+   MOUNTS=""
+   OPTS="-p 82:80"
+   start_function ${1} 1
 }
 function d_shutdown {
    #removes exited container
