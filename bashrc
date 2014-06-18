@@ -15,7 +15,7 @@ if [ ! -f /proc/cpuinfo ];then
 fi
 
 function ssh_compute0 {
-   ssh -l cluser -p 2222 ${DHOST}
+   ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  -l cluser -p 2222 ${DHOST}
 }
 
 function start_qnibterminal {
