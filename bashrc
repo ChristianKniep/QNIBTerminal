@@ -62,7 +62,8 @@ function start_qnibterminal {
 
 function dgit_check {
     GREP=${1-"docker-"}
-    for x in $(ls|grep ${GREP});do pushd ${x};git status -s;popd;done
+    #for x in $(ls|grep ${GREP});do pushd ${x};git status -s;popd;done
+    for x in ${PROJECTS};do pushd docker-${x};git status -s;popd;done
 }
 
 function dgit_clone {
@@ -124,9 +125,16 @@ function d_getip {
    fi
 }
 
+function d_getcpu {
+   echo -n "${1}   "
+   docker inspect -f '{{ .HostConfig.LxcConf }}' ${1}|sed 's/.*Value\:\([0-9]\+\)*.*/\1/'
+}
+
 function eval_cpuset {
    # returns cpuset.cpus for different types
-   LAST_SERVICE_CPUID=${2-0}
+   if [ "X${LAST_SERVICE_CPUID}" == "X" ];then
+      LAST_SERVICE_CPUID=${2-0}
+   fi
    if [ "X${1}" == "Xelk" ];then
       if [ ${LAST_SERVICE_CPUID} -eq 2 ];then
          echo 0,1
@@ -140,26 +148,9 @@ function eval_cpuset {
       fi
    fi
    if [[ "X${1}" == Xcompute* ]] ; then
-      if [ $(echo "${1}" |egrep -c "compute([0-9]|1[0-5])$") -eq 1 ];then
-         echo "1 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
-      if [ $(echo "${1}" |egrep -c "compute(1[6-9]|3[0-1])$") -eq 1 ];then
-         echo "2 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
-      if [ $(echo "${1}" |egrep -c "compute(3[2-9]|4[0-7])$") -eq 1 ];then
-         echo "3 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
-      if [ $(echo "${1}" |egrep -c "compute(4[8-9]|6[0-3])$") -eq 1 ];then
-         echo "4 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
-      if [ $(echo "${1}" |egrep -c "compute(6[4-9]|7[0-9])$") -eq 1 ];then
-         echo "5 + ${LAST_SERVICE_CPUID}"|bc
-         return 0
-      fi
+      comp_id=$(echo ${1} | sed 's/compute\([0-9]\+\)/\1/')
+      echo "(${comp_id} / 16) + ${LAST_SERVICE_CPUID}"|bc
+      return 0
    fi
    echo 0
    return 0
@@ -185,6 +176,7 @@ function start_function {
       OPTS="${OPTS} --volumes-from ${vol}"
    done
    CPUSET=$(eval_cpuset ${CON_NAME})
+   #echo "eval_cpuset ${CON_NAME} = ${CPUSET}"
    if [ $? -ne 0 ];then
       return 1
    fi
@@ -195,9 +187,7 @@ function start_function {
    fi
    DNS="${DNS} --dns-search=${DNS_DOMAIN}"
    OPTS="${OPTS} --privileged"
-   if [ ${NO_CGROUPS} -ne 0 ];then
-      OPTS="${OPTS} --lxc-conf=lxc.cgroup.cpuset.cpus=${CPUSET}"
-   fi
+   OPTS="${OPTS} --lxc-conf=lxc.cgroup.cpuset.cpus=${CPUSET}"
    for MOUNT in ${MOUNTS};do
       OPTS="${OPTS} -v ${MOUNT}"
    done
@@ -243,6 +233,16 @@ function start_elk {
    OPTS="--privileged"
    MOUNTS=""
    start_function elk ${DETACHED}
+}
+
+function start_qnibng {
+   CON_VOL=""
+   CON_LINKED=""
+   DETACHED=${1-0}
+   FORWARD_PORTS=""
+   OPTS="--privileged -v /dev/infiniband/:/dev/infiniband/"
+   MOUNTS="${HOST_SHARE}/whisper:/var/lib/carbon/whisper"
+   start_function qnibng ${DETACHED}
 }
 
 function start_carbon {
@@ -309,6 +309,15 @@ function start_slurmctld {
 function start_compute0 {
    start_comp compute0
 }
+
+function start_computes {
+   for comp in $*;do echo -n "${comp}   "; start_comp ${comp};sleep 1;done
+}
+
+function d_getcpus {
+   for comp in $*;do d_getcpu ${comp};done
+}
+
 function start_comp {
    #starts slurm container and links with DNS
    CON_VOL=""
@@ -334,23 +343,13 @@ function start_comp {
 
 function start_container {
    #starts given image and links with DNS
-   IMG_NAME=${1-X}
-   if [ "X${IMG_NAME}" == "XX" ];then
-      echo "No image name given"
-      return 1
-   fi
-   LXC_CSET=${2-0}
-   echo "Pin to CPU '${LXC_CSET}'..."
-   LXC_OPTS=" --lxc-conf=lxc.cgroup.cpuset.cpus=${LXC_CSET}"
-   RMODE="-t -i --rm=true"
-   RCMD="/bin/bash"
-   DNS="--dns=$(d_getip dns)"
-   docker run ${RMODE} \
-      -v ${HOST_SHARE}/scratch:/scratch \
-      -v ${HOST_SHARE}/chome:/chome \
-      ${LXC_OPTS} \
-      ${IMG_NAME} \
-      /bin/bash
+   CON_VOL=""
+   CON_LINKED=""
+   DETACHED=${1-0}
+   FORWARD_PORTS=""
+   MOUNTS=""
+   OPTS="-p 82:80"
+   start_function ${1} 1
 }
 function d_shutdown {
    #removes exited container
