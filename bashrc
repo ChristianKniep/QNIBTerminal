@@ -157,7 +157,7 @@ function eval_cpuset {
       fi
    fi
    if [[ "X${1}" == Xcompute* ]] ; then
-      comp_id=$(echo ${1} | sed 's/compute\([0-9]\+\)/\1/')
+      comp_id=$(echo ${1} | sed 's/compute\([0-9]*\)/\1/')
       echo "(${comp_id} / 16) + ${QNIB_LAST_SERVICE_CPUID}"|bc
       return 0
    fi
