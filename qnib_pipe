@@ -1,0 +1,133 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""qnib_pipe
+
+Wrapper around pipework to assign an IP to a given container name consistently.
+
+Usage:
+  qnib_pipe [options] <name>
+  qnib_pipe (-h | --help)
+  qnib_pipe --version
+
+Options:
+  -h --help             Show this screen.
+  --version             Show version.
+  --config=<path>       Configuration file [default: /etc/qnib_pipe.conf]
+  --net-prefix=<int>    Network prefix
+  --host-dev=<dev>      Physical network device of the host
+  --cont-dev=<dev>      Network device within container
+  
+
+DNS options:
+  --skip-dns            Skip DNS resolving
+  --dns-host=<host>     DNS server 
+  --dns-port=<int>      DNS server port
+"""
+
+# load librarys
+import sys
+from docopt import docopt
+import envoy
+import DNS
+from configobj import ConfigObj
+from pprint import pprint
+import re
+ 
+class QnibPipe(object):
+    """ Consume a container name and attach an ip to the container
+    """
+
+    def __init__(self, options):
+        """ Init of instance
+        """
+        self.cont_name = options.get('<name>').strip("/")
+        DNS.ParseResolvConf()
+        cfg = ConfigObj(options.get('--config'))
+        self._opt = cfg.dict()['global']
+        self._cfg = {}
+        for section in cfg.sections:
+            if section == 'global':
+                continue
+            self._cfg[section] = cfg[section]
+        for key, val in options.items():
+            if val is None:
+                continue
+            self._opt[key] = val
+        
+    def resove(self, qtype="A", cname_suffix=None):
+        """ fetch response of DNS query and filter by type
+        """
+        reqobj = DNS.Request(name=self.cont_name)
+        resp = reqobj.req()
+        result = []
+        for item in resp.answers:
+            if item['typename'] != qtype:
+                continue
+            if cname_suffix is None or \
+               item['typename'] != 'CNAME' or \
+               not item['name'].endswith(cname_suffix):
+                continue
+            result.append(item)
+        return result
+        
+    def get_ip(self):
+        """ figures out the correct IP address for the given name
+        """
+        res = self.resove()
+        if len(res) != 1:
+            return None
+        return res[0]['data']
+
+
+    def create_ip(self):
+        """ come up with new IP
+        """
+        base = [int(item) for item in self._cfg['ip_global']['base'].split(".")]
+        for key, val in self._cfg['ip_offset'].items():
+            if self.cont_name.startswith(key):
+                offset = int(val)
+                break
+        mat = re.match('[a-z]+(\d+)', self.cont_name)
+        if mat:
+            offset += int(mat.group(1))
+        if offset > 254:
+            offset -= 254
+            base[-1] += 1
+        base.append(offset)
+        return ".".join([str(item) for item in base])
+        
+    def run(self):
+        """ resolve ip, set pipe
+        
+        If no IP can be found, get one from the range
+        """
+        dic = {
+            'name': self.cont_name,
+            'prefix': self._opt.get('--net-prefix'),
+            'phy_dev': self._opt.get('--host-dev'),
+            'cont_dev': self._opt.get('--cont-dev'),
+        }
+        dic['cip'] = None
+        if not self._opt.get('--skip-dns'):
+            dic['cip'] = self.get_ip()
+        if dic['cip'] is None:
+            dic['cip'] = self.create_ip()
+        cmd = "pipework %(phy_dev)s -i %(cont_dev)s %(name)s %(cip)s/%(prefix)s" % dic
+        proc = envoy.run(cmd)
+        if proc.status_code != 0:
+            print "## Something went wrong! EC: %s" % proc.status_code
+            print "#OUT"
+            print proc.std_out
+            print "#ERR"
+            print proc.std_err
+    
+
+def main():
+    """ main function """
+    options = docopt(__doc__,  version='1.0.0')
+    qpipe = QnibPipe(options)
+    qpipe.run()
+
+if __name__ == "__main__":
+    main()

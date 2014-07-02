@@ -5,7 +5,9 @@ export QNIB_MAX_MEMORY=${QNIB_MAX_MEMORY-125M}
 export QNIB_LAST_SERVICE_CPUID=${QNIB_LAST_SERVICE_CPUID-1}
 export QNIB_PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
 export QNIB_PROJECTS="${QNIB_PROJECTS} grafana graphite-api slurm compute slurmctld haproxy carbon qnibng"
-
+export DHOST=${DHOST-localhost}
+export QNIB_PIPE=${QNIB_PIPE-1}
+export QNIB_REG=${QNIB_REG}
 export QNIB_CONTAINERS="dns elk carbon graphite-web graphite-api grafana slurmctld compute0 haproxy"
 
 function set_env {
@@ -184,13 +186,20 @@ function start_function {
    for vol in ${CON_VOL};do
       OPTS="${OPTS} --volumes-from ${vol}"
    done
+   if [ "X${QNIB_PIPE}" == "X1" ];then
+      OPTS="${OPTS} --net=none"
+   fi
    CPUSET=$(eval_cpuset ${CON_NAME})
    #echo "eval_cpuset ${CON_NAME} = ${CPUSET}"
    if [ $? -ne 0 ];then
       return 1
    fi
    if [ "${CON_NAME}" != "dns" ];then
-      DNS="--dns=$(d_getip ${QNIB_DNS_HOST})"
+      if [ "X${QNIB_PIPE}" == "X1" ];then
+         DNS="--dns=10.10.1.1"
+      else
+         DNS="--dns=$(d_getip ${DNS_HOST})"
+      fi
    else
       DNS="--dns=127.0.0.1"
    fi
@@ -200,6 +209,11 @@ function start_function {
    for MOUNT in ${MOUNTS};do
       OPTS="${OPTS} -v ${MOUNT}"
    done
+   if [ "X${QNIB_REG}" != "X" ];then
+      NEW_IMG_PREFIX="${QNIB_REG}/${IMG_PREFIX}"
+   else
+      NEW_IMG_PREFIX="${IMG_PREFIX}"
+   fi
    if [ ${DETACHED} -eq 0 ];then
       echo $(docker run -d -h ${CON_NAME} --name ${CON_NAME} \
          ${OPTS} \
@@ -208,7 +222,8 @@ function start_function {
          -v /dev/random:/dev/random -v /dev/full:/dev/full \
          -v /dev/zero:/dev/zero \
          -v ${QNIB_HOST_SHARE}/scratch:/scratch \
-         ${QNIB_IMG_PREFIX}/${IMG_NAME}:latest)
+         -v ${HOST_SHARE}/scratch:/scratch \
+         ${NEW_IMG_PREFIX}/${IMG_NAME}:latest)
       else
          docker run -t -i --rm -h ${CON_NAME} --name ${CON_NAME} \
             ${OPTS} \
@@ -217,7 +232,7 @@ function start_function {
             -v /dev/random:/dev/random -v /dev/full:/dev/full \
             -v /dev/zero:/dev/zero \
             -v ${QNIB_HOST_SHARE}/scratch:/scratch \
-            ${QNIB_IMG_PREFIX}/${IMG_NAME}:latest \
+            ${NEW_IMG_PREFIX}/${IMG_NAME}:latest \
             /bin/bash
       fi
 }
@@ -315,6 +330,18 @@ function start_slurmctld {
    start_function slurmctld ${DETACHED}
 }
 
+function start_ib {
+   CON_VOL=""
+   CON_LINKED=""
+   DETACHED=${2-0}
+   CON_NAME=${1}
+   FORWARD_PORTS=""
+   MOUNTS="${HOST_SHARE}/chome:/chome"
+   OPTS="--privileged -v /dev/infiniband/:/dev/infiniband/"
+   start_function infiniband ${DETACHED} ${CON_NAME}
+
+}
+
 function start_compute0 {
    start_comp compute0
 }
@@ -351,6 +378,9 @@ function start_comp {
    DETACHED=${2-0}
    OPTS="--memory=${QNIB_MAX_MEMORY}"
    MOUNTS="${QNIB_HOST_SHARE}/chome:/chome"
+   if [ "X${QNIB_IB}" != "X" ];then
+      OPTS="${OPTS} --privileged -v /dev/infiniband/:/dev/infiniband/"
+   fi
    FORWARD_PORTS=""
    start_function ${IMG_NAME} ${DETACHED} ${CON_NAME}
 }
