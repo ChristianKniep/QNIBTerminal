@@ -5,34 +5,22 @@ export QNIB_MAX_MEMORY=${QNIB_MAX_MEMORY-125M}
 export QNIB_LAST_SERVICE_CPUID=${QNIB_LAST_SERVICE_CPUID-1}
 export QNIB_PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
 export QNIB_PROJECTS="${QNIB_PROJECTS} grafana graphite-api slurm compute slurmctld haproxy carbon qnibng"
+export QNIB_IBSIM_NODES=${QNIB_IBSIM_NODES-4}
+export QNIB_IMG_PREFIX=${QNIB_IMG_PREFIX-qnib}
 export DHOST=${DHOST-localhost}
-export QNIB_PIPE=${QNIB_PIPE-1}
+export QNIB_PIPE=${QNIB_PIPE-0}
 export QNIB_REG=${QNIB_REG}
 export QNIB_CONTAINERS="dns elk carbon graphite-web graphite-api grafana slurmctld compute0 haproxy"
 
-function set_env {
-   for item in $(env);do
-      if [[ ${item} == QNIB_* ]];then
-         key=$(echo ${item}| awk -F\= '{print $1}')
-         if [ ${key} == "QNIB_PROJECTS" ];then
-            continue
-         fi
-         if [ ${key} == "QNIB_CONTAINERS" ];then
-            continue
-         fi
-         val=$(echo ${item}| sed -e "s/${key}\=//")
-         echo -n "${key}? [${val}] "
-         read new
-         if [ "X${new}" != "X" ];then
-            export ${key}="${new}"
-         fi
-      fi
-   done
-}
 
-function ssh_compute0 {
-   ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no  -l cluser -p 2222 $(d_getip haproxy)
-}
+# setup 2.0
+export DOCKER_TARGET=""
+export DOCKER_REG=${DOCKER_REG}
+export DOCKER_DEF_HOP=""
+export DOCKER_PORT=6000
+export CONT_LIST_BASE="etcd dns carbon elk"
+export CONT_LIST_INFO="graphite-api graphite-web grafana"
+# \setup 2.0
 
 function start_qnibterminal {
    # starts the complete stack
@@ -77,7 +65,13 @@ function start_qnibterminal {
 }
 
 function dgit_check {
-   for x in ${QNIB_PROJECTS};do pushd docker-${x};git status -s;popd;done
+   for x in ${QNIB_PROJECTS};do 
+       if [ -d docker-${x} ];then
+           pushd docker-${x}
+           git status -s
+           popd
+       fi
+   done
 }
 
 function dgit_clone {
@@ -143,6 +137,24 @@ function d_getcpu {
    cpuid=$(docker inspect -f '{{ .HostConfig.LxcConf }}' ${1}|sed -e 's/\[map\[Key:lxc.cgroup.cpuset.cpus Value://'|sed -e 's/\]\]//')
    printf "%-20s %s\n" $1 ${cpuid}
 }
+function d_getport {
+    # returns external port for interal port $1 of given ($2) container
+    # if $2=='' returns last containers ip
+    if [ "X${1}" == "X" ]; then
+        echo "No port given"
+        return 1
+    fi
+    LAST_CONT=$(docker ps -l|egrep -v "(Exit \d|^CONTAINER ID)"|awk '{print $1}')
+    DCONT=${2-${LAST_CONT}}
+    if [ "X${DCONT}" == "X" ]; then
+        echo "No container given"
+        return 1
+    else
+        for line in $(docker inspect -f '{{ .NetworkSettings.Ports }}' ${DCONT}|sed -e 's/\ H/_H/g' |sed -e 's/^/"/'|sed -e "s/\]\ /\"\ \"/g"|sed -e 's/$/\"/');do
+            echo $line|awk -F'] ' '{print $1}'|egrep -o "${1}.*HostPort\:[0-9]+"|sed -e 's#/tcp##'|awk -F\: '{print $NF}'
+        done
+    fi
+}
 
 function eval_cpuset {
    # returns cpuset.cpus for different types`
@@ -151,140 +163,54 @@ function eval_cpuset {
          echo 0,1
          return 0
       fi
-   fi
-   if [[ "X${1}" == Xgraphite* ]];then
+   elif [[ "X${1}" == Xgraphite* ]];then
+      if [ ${QNIB_LAST_SERVICE_CPUID} -eq 2 ];then
+         echo 0,1
+         return 0
+      fi
+   elif [[ "X${1}" == Xcompute* ]] ; then
+      comp_id=$(echo ${1} | sed 's/compute\([0-9]*\)/\1/')
+      echo "(${comp_id} / 16) + ${QNIB_LAST_SERVICE_CPUID}"|bc
+      return 0
+   elif [ "X${1}" == "Xqnibng" ];then
       if [ ${QNIB_LAST_SERVICE_CPUID} -eq 2 ];then
          echo 0,1
          return 0
       fi
    fi
-   if [[ "X${1}" == Xcompute* ]] ; then
-      comp_id=$(echo ${1} | sed 's/compute\([0-9]*\)/\1/')
-      echo "(${comp_id} / 16) + ${QNIB_LAST_SERVICE_CPUID}"|bc
-      return 0
-   fi
    echo 0
    return 0
 }
 
-function start_function {
-   QNIB_IMG_PREFIX=${QNIB_IMG_PREFIX-qnib}
-   IMG_NAME=${1}
-   CON_NAME=${3-${IMG_NAME}}
-   DETACHED=${2-0}
-   OPTS="${OPTS}"
-   if [ ${CON_NAME} == "carbon" ];then
-      OPTS="${OPTS} -v ${QNIB_HOST_SHARE}/whisper:/var/lib/carbon/whisper"
-   fi
-   for port in ${FORWARD_PORTS};do
-      OPTS="${OPTS} -p ${port}:${port}"
-   done
-   for link in ${CON_LINKED};do
-      upper=$(echo ${link}|awk '{print toupper($0)}')
-      OPTS="${OPTS} --link ${link}:${upper}"
-   done
-   for vol in ${CON_VOL};do
-      OPTS="${OPTS} --volumes-from ${vol}"
-   done
-   if [ "X${QNIB_PIPE}" == "X1" ];then
-      OPTS="${OPTS} --net=none"
-   fi
-   CPUSET=$(eval_cpuset ${CON_NAME})
-   #echo "eval_cpuset ${CON_NAME} = ${CPUSET}"
-   if [ $? -ne 0 ];then
-      return 1
-   fi
-   if [ "${CON_NAME}" != "dns" ];then
-      if [ "X${QNIB_PIPE}" == "X1" ];then
-         DNS="--dns=10.10.1.1"
-      else
-         DNS="--dns=$(d_getip ${DNS_HOST})"
-      fi
-   else
-      DNS="--dns=127.0.0.1"
-   fi
-   DNS="${DNS} --dns-search=${QNIB_DNS_DOMAIN}"
-   OPTS="${OPTS} --privileged"
-   OPTS="${OPTS} --lxc-conf=lxc.cgroup.cpuset.cpus=${CPUSET}"
-   for MOUNT in ${MOUNTS};do
-      OPTS="${OPTS} -v ${MOUNT}"
-   done
-   if [ "X${QNIB_REG}" != "X" ];then
-      NEW_IMG_PREFIX="${QNIB_REG}/${IMG_PREFIX}"
-   else
-      NEW_IMG_PREFIX="${IMG_PREFIX}"
-   fi
-   if [ ${DETACHED} -eq 0 ];then
-      echo $(docker run -d -h ${CON_NAME} --name ${CON_NAME} \
-         ${OPTS} \
-         ${DNS} \
-         -v /dev/null:/dev/null -v /dev/urandom:/dev/urandom \
-         -v /dev/random:/dev/random -v /dev/full:/dev/full \
-         -v /dev/zero:/dev/zero \
-         -v ${QNIB_HOST_SHARE}/scratch:/scratch \
-         -v ${HOST_SHARE}/scratch:/scratch \
-         ${NEW_IMG_PREFIX}/${IMG_NAME}:latest)
-      else
-         docker run -t -i --rm -h ${CON_NAME} --name ${CON_NAME} \
-            ${OPTS} \
-            ${DNS} \
-            -v /dev/null:/dev/null -v /dev/urandom:/dev/urandom \
-            -v /dev/random:/dev/random -v /dev/full:/dev/full \
-            -v /dev/zero:/dev/zero \
-            -v ${QNIB_HOST_SHARE}/scratch:/scratch \
-            ${NEW_IMG_PREFIX}/${IMG_NAME}:latest \
-            /bin/bash
-      fi
-}
 
-function start_dns {
-   #starts the first container of QNIBTerminal
+function start_nginxproxy {
    CON_VOL=""
    CON_LINKED=""
    DETACHED=${1-0}
-   FORWARD_PORTS=""
-   OPTS=""
-   MOUNTS=""
-   start_function helixdns ${DETACHED} dns
-
-}
-function start_elk {
-   #starts the first container of QNIBTerminal
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${1-0}
-   FORWARD_PORTS=""
+   FORWARD_PORTS="9200 80"
    OPTS="--privileged"
    MOUNTS=""
-   start_function elk ${DETACHED}
+   start_function nginxproxy ${DETACHED}
 }
 
 function start_qnibng {
    CON_VOL=""
-   CON_LINKED=""
+   CON_LINKED="carbon elk"
    DETACHED=${1-0}
    FORWARD_PORTS=""
-   OPTS="--privileged -v /dev/infiniband/:/dev/infiniband/"
-   MOUNTS="${QNIB_HOST_SHARE}/whisper:/var/lib/carbon/whisper"
+   OPTS="--privileged -e IBSIM_NODES=${QNIB_IBSIM_NODES}"
+   if [ -e /dev/infiniband ];then
+      OPTS="${OPTS} -v /dev/infiniband/:/dev/infiniband/"
+   fi
+   MOUNTS="/home/docker/:/home/docker/"
    start_function qnibng ${DETACHED}
-}
-
-function start_carbon {
-   #starts the first container of QNIBTerminal
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${1-0}
-   FORWARD_PORTS=""
-   OPTS="--privileged"
-   MOUNTS="${QNIB_HOST_SHARE}/whisper:/var/lib/carbon/whisper"
-   start_function carbon ${DETACHED}
 }
 
 function start_haproxy {
    CON_VOL=""
    CON_LINKED=""
    DETACHED=${1-0}
-   FORWARD_PORTS="80 9200 2222"
+   FORWARD_PORTS="80 9200"
    MOUNTS=""
    OPTS=""
    start_function haproxy ${DETACHED}
@@ -300,25 +226,6 @@ function start_grafana {
    start_function grafana ${DETACHED}
 }
 
-function start_graphite_api {
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${1-0}
-   FORWARD_PORTS=""
-   MOUNTS="${QNIB_HOST_SHARE}/whisper:/var/lib/carbon/whisper"
-   OPTS=""
-   start_function graphite-api ${DETACHED}
-}
-
-function start_graphite_web {
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${1-0}
-   FORWARD_PORTS=""
-   MOUNTS="${QNIB_HOST_SHARE}/whisper:/var/lib/carbon/whisper"
-   OPTS=""
-   start_function graphite-web ${DETACHED}
-}
 
 function start_slurmctld {
    CON_VOL=""
@@ -340,14 +247,6 @@ function start_ib {
    OPTS="--privileged -v /dev/infiniband/:/dev/infiniband/"
    start_function infiniband ${DETACHED} ${CON_NAME}
 
-}
-
-function start_compute0 {
-   start_comp compute0
-}
-
-function start_computes {
-   for comp in $*;do echo -n "${comp}   "; start_comp ${comp};sleep 1;done
 }
 
 function d_getcpus {
@@ -385,16 +284,7 @@ function start_comp {
    start_function ${IMG_NAME} ${DETACHED} ${CON_NAME}
 }
 
-function start_container {
-   #starts given image and links with DNS
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${1-0}
-   FORWARD_PORTS=""
-   MOUNTS=""
-   OPTS="-p 82:80"
-   start_function ${1} 1
-}
+
 function d_shutdown {
    #removes exited container
    NOT=${1-0}
@@ -417,4 +307,215 @@ function d_garbage_collect {
          fi
       done
    fi
+}
+
+## start 2.0
+function set_dockerenv {
+    for item in $(env);do
+        if [[ ${item} == DOCKER_* ]];then
+            key=$(echo ${item}| awk -F\= '{print $1}')
+            val=$(echo ${item}| sed -e "s/${key}\=//")
+                
+            if [ ${key} == "DOCKER_HOST" ];then
+                echo -n "${key}? [${val} # <blank to reset>] "
+                read new
+                export ${key}="${new}"
+            else
+                echo -n "${key}? [${val}] "
+                read new_val
+                if [ "X${new_val}" != "X" ];then
+                    export ${key}="${new_val}"
+                else
+                    export ${key}="${val}"
+                fi
+            fi
+        fi
+    done
+    if [ "X${DOCKER_HOST}" != "X" ];then
+        echo "DOCKER_HOST already set '${DOCKER_HOST}' (unset DOCKER_HOST to proceed)"
+    else
+        echo -n "# Do you have direct access to the docker server '${DOCKER_TARGET}'? [Y/n] "
+        read inp
+        if [ "${inp}" == "n" ];then
+            ask_hop
+            check_hop
+            DTUNNEL_LOCAL_PORT=$(get_free_port)
+            echo "# > create STUNNEL: ${DTUNNEL_LOCAL_PORT}:${DOCKER_TARGET}:${DOCKER_PORT} ${DOCKER_HOP}"
+            ssh -N -f -L ${DTUNNEL_LOCAL_PORT}:${DOCKER_TARGET}:${DOCKER_PORT} ${DOCKER_HOP}
+            export DOCKER_HOST=tcp://localhost:${DTUNNEL_LOCAL_PORT}
+            export DHOST="${DOCKER_HOP}->${DOCKER_TARGET}"
+        else
+            export DHOST="${DOCKER_TARGET}"
+            export DOCKER_HOST=tcp://${DOCKER_TARGET}:${DOCKER_PORT}
+            
+        fi
+        
+    fi
+}
+function d_start {
+   ###### Starts a container
+   ## if $1==1 it will start into a bash
+    if [ "X${INTERACTIVE}" != "X0" ];then
+        if [ "X${INTERACTIVE}" != "X1" ];then
+            CMD=/bin/bash
+        else
+            CMD=${INTERACTIVE}
+        fi
+        docker run -ti --rm ${OPTS} qnib/${CONT_NAME} ${CMD}
+    else
+        printf "# Start %-20s as %-30s > " "'${CONT_NAME}'" "'${USER}_${NAME}'"
+        CONT_ID=$(docker run -d ${OPTS} qnib/${CONT_NAME})
+        EC=$?
+        if [ ${EC} -eq 0 ];then
+            echo "[OK]   IP: $(d_getip ${USER}_${NAME})"
+        else
+            echo "[FAIL] EC: ${EC}"
+        fi
+    fi
+}
+
+function stop_cont {
+    NAME=${1}
+    docker rm -f ${USER}_${NAME}
+}
+
+function start_cont {
+    ## starts container resolve options by name
+    NAME=${1}
+    CONT_NAME=${NAME}
+    OPTS="--name ${USER}_${NAME} -h ${NAME} -p 22 --dns-search=qnib"
+    OPTS="${OPTS} --privileged -v /dev/null:/dev/null -v /dev/random:/dev/random -v /dev/urandom:/dev/urandom"
+    if [ ${NAME} != 'dns' -a $(docker ps |egrep -c "qnib/[a-z]+dns.*${USER}.*$") -eq 1 ];then
+        OPTS="${OPTS} --dns $(d_getip ${USER}_dns)"
+    fi
+    if [ "X${SYNC_DIR}" != "X" ];then
+        OPTS="${OPTS} -v ${SYNC_DIR}:/data/"
+    fi
+    INTERACTIVE=${2-0}
+    case ${NAME} in
+        dns)
+            CONT_NAME="skydns"
+            OPTS="${OPTS} --dns 127.0.0.1"
+            if [ $(docker ps|egrep -c "7001/tcp.*${USER}.*$") -eq 1 ];then
+                OPTS="${OPTS} --link ${USER}_etcd:etcd"
+            fi
+        ;;
+        term*)
+            CONT_NAME="terminal"
+        ;;
+        etcd)
+            OPTS="${OPTS} -p 4001 -p 7001"
+        ;;
+        carbon)
+            OPTS="${OPTS} -p 2003 -p 2004 -p 7002 -v /var/lib/carbon/whisper/"
+        ;;
+        graphite-web|graphite-api)
+            OPTS="${OPTS} -p 80 --volumes-from ${USER}_carbon "
+        ;;
+        elk)
+            OPTS="${OPTS} -p 9200:9200 -p 80:80"
+        ;;
+        grafana)
+            OPTS="${OPTS} -p 80:80"
+        ;;
+    esac
+    d_start
+}
+
+function qssh_base {
+    ### ssh into given container
+    # if no name is given fvt is used
+    TARGET=${1-fvt}
+    DCONT=$(docker ps |egrep -o "${USER}_${TARGET}")
+    DHOST=$(echo $DOCKER_HOST |egrep -o "[A-Za-z0-9\:]+$"|awk -F\: '{print $1}')
+    DPORT=$(echo $DOCKER_HOST |egrep -o "\:[0-9]+$"|awk -F\: '{print $2}')
+    DO_HOP=0
+    if [ ${DHOST} == "localhost" ];then
+        # if we are on localhost, we might check if there is a stunnel to the DOCKER PORT
+        HOP_HOST=$(ps -ef|grep -v grep|egrep -o "${DPORT}\:.*\:6000.*"|awk '{print $NF}')
+        echo "# HOP_HOST: ${HOP_HOST}"
+        DTUNNEL=$(ps -ef|grep -v grep|egrep -o "${DPORT}\:.*\:6000.*"|awk '{print $1}')
+        D_DEST=$(echo ${DTUNNEL}|awk -F\: '{print $2}')
+        echo "# D_DEST: ${D_DEST}"
+        DO_HOP=1
+    fi
+    if [ "X${DCONT}" == "X" ];then
+        echo "Sorry, no container named ${USER}_${TARGET} found..."
+        return 1
+    fi
+    SSH_PORT=$(d_getport 22 ${DCONT})
+    if [ "X${SSH_PORT}" == "X" ];then
+        echo "Sorry, the container ${USER}_${TARGET} does not expose port 22..."
+        return 1
+    fi
+}
+function qssh {
+    qssh_base $*
+    shift
+    # if we hop, then we have to take the hop
+    if [ ${DO_HOP} -eq 1 ];then
+        ssh -A -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null ${HOP_HOST} -t ssh -p ${SSH_PORT} root@${DOCKER_TARGET} $*
+    else
+        ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -p ${SSH_PORT} root@${DHOST} $*
+    fi
+}
+function qscp_to {
+    qssh_base $*
+    shift
+    # if we hop, then we have to take the hop
+    if [ ${DO_HOP} -eq 1 ];then
+        scp -oStrictHostKeyChecking=no $1 ${HOP_HOST}:
+        ssh -A -oStrictHostKeyChecking=no ${HOP_HOST} -t scp -oUserKnownHostsFile=/dev/null -P ${SSH_PORT} $1 root@${DOCKER_TARGET}:$2
+    else
+        scp -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -P ${SSH_PORT} $1 root@${DHOST}:$2
+    fi
+}
+function qscp_from {
+    qssh_base $*
+    shift
+    # if we hop, then we have to take the hop
+    if [ ${DO_HOP} -eq 1 ];then
+        ssh -A -oStrictHostKeyChecking=no ${HOP_HOST} -t scp -oUserKnownHostsFile=/dev/null -P ${SSH_PORT} $1 root@${DOCKER_TARGET}:$2
+        scp -oStrictHostKeyChecking=no ${HOP_HOST}:$1 .
+    else
+        scp -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -P ${SSH_PORT} root@${DHOST}:$1 $2
+    fi
+}
+
+
+
+function list_stop {
+    for cont in $*;do
+        stop_cont ${cont}
+    done
+}
+function list_start {
+    for cont in $*;do
+        start_cont ${cont}
+    done
+}
+function start_qtbase {
+    ### starts the containers needed for qnibterminal
+    list_start ${CONT_LIST_BASE}
+}
+function stop_qtbase {
+    ### starts the containers needed for qnibterminal
+    list_stop ${CONT_LIST_BASE}
+}
+function start_qtinfo {
+    ### starts the containers needed for qnibterminal
+    list_start ${CONT_LIST_INFO}
+}
+function stop_qtinfo {
+    ### starts the containers needed for qnibterminal
+    list_stop ${CONT_LIST_INFO}
+}
+
+function start_qt {
+    start_qtbase
+    start_qtinfo
+}
+function stop_qt {
+    stop_qtinfo
+    stop_qtbase
 }
