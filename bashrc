@@ -122,15 +122,18 @@ function dgit_build {
 }
 
 function d_getip {
-   # returns ip of given container, if none returns last containers ip
-   LAST_CONT=$(docker ps -l|egrep -v "(Exit \d|^CONTAINER ID)"|awk '{print $1}')
-   DCONT=${1-${LAST_CONT}}
-   if [ "X${DCONT}" == "X" ]; then
-      echo "No container given"
-      return 1
-   else
-      echo $(docker inspect -f '{{ .NetworkSettings.IPAddress }}' ${DCONT})
-   fi
+    # returns ip of given container, if none returns last containers ip
+    LAST_CONT=$(docker ps -l|egrep -v "(Exit \d|^CONTAINER ID)"|awk '{print $1}')
+    DCONT=${1-${LAST_CONT}}
+    if [ "X${DCONT}" == "X" ]; then
+        echo "No container given"
+        return 1
+    else
+        if [ $(docker ps|egrep -c ${1}) -eq 0 ];then
+            return 0
+        fi
+        echo $(docker inspect -f '{{ .NetworkSettings.IPAddress }}' ${DCONT})
+    fi
 }
 
 function d_getcpu {
@@ -454,9 +457,9 @@ function qssh {
     shift
     # if we hop, then we have to take the hop
     if [ ${DO_HOP} -eq 1 ];then
-        ssh -A -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null ${HOP_HOST} -t ssh -p ${SSH_PORT} root@${DOCKER_TARGET} $*
+        ssh -A -oStrictHostKeyChecking=no -oLogLevel=quiet -oUserKnownHostsFile=/dev/null ${HOP_HOST} -t ssh -p ${SSH_PORT} root@${DOCKER_TARGET} $*
     else
-        ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -p ${SSH_PORT} root@${DHOST} $*
+        ssh -oStrictHostKeyChecking=no -oLogLevel=quiet -oUserKnownHostsFile=/dev/null -p ${SSH_PORT} root@${DHOST} $*
     fi
 }
 function qscp_to {
@@ -489,6 +492,11 @@ function list_stop {
         stop_cont ${cont}
     done
 }
+function list_status {
+    for cont in $*;do
+        status_cont ${cont}
+    done
+}
 function list_start {
     for cont in $*;do
         start_cont ${cont}
@@ -501,6 +509,51 @@ function start_qtbase {
 function stop_qtbase {
     ### starts the containers needed for qnibterminal
     list_stop ${CONT_LIST_BASE}
+}
+function status_cont {
+    IP=$(d_getip ${USER}_${1})
+    if [ "X${IP}" == "X" ];then
+        return 0
+    fi
+    PORTS=""
+    for line in $(docker inspect -f '{{ .NetworkSettings.Ports }}' ${USER}_${1}|sed -e 's/\ H/_H/g' |sed -e 's/^/"/'|sed -e "s/\]\ /\"\ \"/g"|sed -e 's/$/\"/');do
+        SPORT=$(echo $line|awk -F'] ' '{print $1}'|egrep -o "[0-9]+.*HostPort\:[0-9]+"|awk -F\/ '{print $1}')
+        DPORT=$(echo $line|awk -F'] ' '{print $1}'|egrep -o "[0-9]+.*HostPort\:[0-9]+"|sed -e 's#/tcp##'|awk -F\: '{print $NF}')
+        if [ "X${PORTS}" != "X" ];then
+            PORTS="${PORTS} "
+        fi
+        PORTS="${PORTS}${SPORT}:${DPORT}"
+    done
+    STAT_STR=""
+    STAT_STR="[\e[32mO\e[0m\e[42mE\e[0m\e[34mS\e[91mF\e[93m?\e[0m] "
+    for line in $(qssh ${1} supervisorctl status|awk '{print $1"_"$2}');do
+        PROC=$(echo $line|awk -F_ '{print $1}')
+        STAT=$(echo $line|awk -F_ '{print $2}')
+        case $STAT in
+            RUNNING)
+                STAT_STR=" ${STAT_STR}\e[32m${PROC}\e[0m "
+            ;;
+            EXITED)
+                STAT_STR=" ${STAT_STR}\e[42m${PROC}\e[0m "
+            ;;
+            STOPPED)
+                STAT_STR=" ${STAT_STR}\e[34m${PROC}\e[0m " 
+            ;;
+            FATAL|BACKOFF)
+                STAT_STR=" ${STAT_STR}\e[91m${PROC}\e[0m "
+            ;;
+            STARTING)
+                STAT_STR=" ${STAT_STR}\e[5m\e[32m${PROC}\e[0m "
+            ;;
+            *)
+                STAT_STR=" ${STAT_STR}\e[93m${PROC}\e[0m "
+            ;;
+        esac
+    done
+    printf "%-20s %-20s %-40s ${STAT_STR}\n" "${USER}_${1}" "${IP}" "${PORTS}"
+}
+function status_qtbase {
+    list_status ${CONT_LIST_BASE}
 }
 function start_qtinfo {
     ### starts the containers needed for qnibterminal
