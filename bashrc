@@ -12,7 +12,6 @@ export QNIB_PIPE=${QNIB_PIPE-0}
 export QNIB_REG=${QNIB_REG}
 export QNIB_CONTAINERS="dns elk carbon graphite-web graphite-api grafana slurmctld compute0 haproxy"
 
-
 # setup 2.0
 export DOCKER_TARGET=""
 export DOCKER_REG=${DOCKER_REG}
@@ -20,6 +19,7 @@ export DOCKER_DEF_HOP=""
 export DOCKER_PORT=6000
 export CONT_LIST_BASE="etcd dns carbon elk"
 export CONT_LIST_INFO="graphite-api graphite-web grafana"
+export CONT_LIST_COMPUTE="slurmctld compute0 compute1"
 # \setup 2.0
 
 function start_qnibterminal {
@@ -94,7 +94,7 @@ function dgit_clone {
 }
 
 function dgit_build {
-   echo -n "Where arethe git-directories? [.] "
+   echo -n "Where create git-directories? [.] "
    read WORKDIR
    if [ "X${WORKDIR}" == "X" ];then
       WORKDIR="./"
@@ -107,7 +107,7 @@ function dgit_build {
    for proj in ${MY_PROJECTS};do
       DIR="${WORKDIR}/docker-${proj}"
       if [ -d ${DIR} ];then
-         echo "########## build> docker/${proj}"
+         echo "########## build> qnib/${proj}"
          pushd ${DIR} >/dev/null
          docker build --rm -t qnib/${proj} .
          EC=$?
@@ -184,6 +184,7 @@ function eval_cpuset {
    echo 0
    return 0
 }
+
 
 
 function start_nginxproxy {
@@ -403,8 +404,14 @@ function start_cont {
                 OPTS="${OPTS} --link ${USER}_etcd:etcd"
             fi
         ;;
+        skydock)
+            OPTS="${OPTS} -v /var/run/docker.sock:/docker.sock"
+        ;;
         term*)
             CONT_NAME="terminal"
+        ;;
+        compute*)
+            CONT_NAME="compute"
         ;;
         etcd)
             OPTS="${OPTS} -p 4001 -p 7001"
@@ -416,10 +423,11 @@ function start_cont {
             OPTS="${OPTS} -p 80 --volumes-from ${USER}_carbon "
         ;;
         elk)
-            OPTS="${OPTS} -p 9200:9200 -p 80:80"
+            HTTP_PORT=8080
+            OPTS="${OPTS} -e HTTPPORT=${HTTP_PORT} -p ${HTTP_PORT}:80"
         ;;
         grafana)
-            OPTS="${OPTS} -p 80:80"
+            OPTS="${OPTS} -p 80"
         ;;
     esac
     d_start
@@ -430,7 +438,7 @@ function qssh_base {
     # if no name is given fvt is used
     TARGET=${1-fvt}
     DCONT=$(docker ps |egrep -o "${USER}_${TARGET}")
-    DHOST=$(echo $DOCKER_HOST |egrep -o "[A-Za-z0-9\:]+$"|awk -F\: '{print $1}')
+    DHOST=$(echo $DOCKER_HOST |egrep -o "[A-Za-z0-9\.\:]+$"|awk -F\: '{print $1}')
     DPORT=$(echo $DOCKER_HOST |egrep -o "\:[0-9]+$"|awk -F\: '{print $2}')
     DO_HOP=0
     if [ ${DHOST} == "localhost" ];then
@@ -563,7 +571,14 @@ function stop_qtinfo {
     ### starts the containers needed for qnibterminal
     list_stop ${CONT_LIST_INFO}
 }
-
+function start_qtcomp {
+    ### starts the containers needed for qnibterminal
+    list_start ${CONT_LIST_COMPUTE}
+}
+function stop_qtcomp {
+    ### starts the containers needed for qnibterminal
+    list_stop ${CONT_LIST_COMPUTE}
+}
 function start_qt {
     start_qtbase
     start_qtinfo
@@ -571,4 +586,16 @@ function start_qt {
 function stop_qt {
     stop_qtinfo
     stop_qtbase
+}
+function drun_pure {
+    docker run -ti --rm \
+         ${1} /bin/bash
+}
+function drun {
+    MOUNTS="-v /dev/null:/dev/null -v /dev/urandom:/dev/urandom"
+    MOUNTS="${MOUNTS} -v /dev/random:/dev/random -v /dev/zero:/dev/zero"
+    if [ "X${SYNC_DIR}" != "X" ];then
+        MOUNTS=" ${MOUNTS} -v ${SYNC_DIR}:/project/"
+    fi
+    docker run -ti --rm --privileged ${MOUNTS} ${1} /bin/bash
 }
