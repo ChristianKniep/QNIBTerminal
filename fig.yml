@@ -3,6 +3,9 @@ consul:
   image: qnib/consul
   ports:
    - "8500:8500"
+  environment:
+  - DC_NAME=dc1
+  - ENABLE_SYSLOG=true
   dns: 127.0.0.1
   privileged: true
 
@@ -11,6 +14,9 @@ grafana:
   image: qnib/grafana
   ports:
    - "80:80"
+  environment:
+  - DC_NAME=dc1
+  - ENABLE_SYSLOG=true
   dns: 127.0.0.1
   links:
   - consul:consul
@@ -24,6 +30,9 @@ elk:
    - "8080:80"
    - "5500:5500"
    - "5514:5514/tcp"
+  environment:
+  - DC_NAME=dc1
+  - ENABLE_SYSLOG=true
   dns: 127.0.0.1
   links:
   - consul:consul
@@ -40,16 +49,13 @@ influxdb:
    - "8086:8086"
    - "2003:2003"
   dns: 127.0.0.1
+  environment:
+  - DC_NAME=dc1
+  - ENABLE_SYSLOG=true
   links:
   - consul:consul
   volumes:
-   - ./influxdb/:/opt/influxdb/shared/
+   # Boot2docker shares via nfs, which seems not to work with influxdb
+   #- ./influxdb/:/opt/influxdb/shared/
+   - /opt/influxdb/shared/
   privileged: true
-
-#slurmctld:
-#  hostname: slurmctld
-#  image: qnib/slurmctld
-#  dns: 127.0.0.1
-#  links:
-#  - consul:consul
-#  privileged: true

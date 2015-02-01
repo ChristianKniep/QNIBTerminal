@@ -3,14 +3,15 @@ export QNIB_DNS_HOST=${QNIB_DNS_HOST-dns}
 export QNIB_HOST_SHARE=${QNIB_HOST_SHARE-/data/}
 export QNIB_MAX_MEMORY=${QNIB_MAX_MEMORY-125M}
 export QNIB_LAST_SERVICE_CPUID=${QNIB_LAST_SERVICE_CPUID-1}
-export QNIB_PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
-export QNIB_PROJECTS="${QNIB_PROJECTS} grafana graphite-api slurm compute slurmctld haproxy carbon qnibng"
+export QNIB_BASE_PROJECTS="fd20 supervisor consul terminal elk grafana influxdb"
+export QNIB_TERM_PROJECTS="${QNIB_PROJECTS} slurm compute slurmctld haproxy"
+export QNIB_PROJECTS="${QNIB_BASE_PROJECTS} ${QNIB_TERM_PROJECTS}"
 export QNIB_IBSIM_NODES=${QNIB_IBSIM_NODES-4}
 export QNIB_IMG_PREFIX=${QNIB_IMG_PREFIX-qnib}
 export DHOST=${DHOST-localhost}
 export QNIB_PIPE=${QNIB_PIPE-0}
 export QNIB_REG=${QNIB_REG}
-export QNIB_CONTAINERS="dns elk carbon graphite-web graphite-api grafana slurmctld compute0 haproxy"
+export QNIB_CONTAINERS="consul elk influxdb grafana slurmctld compute0 haproxy"
 
 # setup 2.0
 export DOCKER_TARGET=""
@@ -69,6 +70,26 @@ function dgit_check {
        if [ -d docker-${x} ];then
            pushd docker-${x}
            git status -s
+           popd
+       fi
+   done
+}
+
+function dgit_push {
+   for x in ${QNIB_PROJECTS};do 
+       if [ -d docker-${x} ];then
+           pushd docker-${x}
+           git push
+           popd
+       fi
+   done
+}
+
+function dgit_pull {
+   for x in ${QNIB_PROJECTS};do 
+       if [ -d docker-${x} ];then
+           pushd docker-${x}
+           git pull
            popd
        fi
    done
@@ -591,6 +612,11 @@ function drun_pure {
     docker run -ti --rm \
          ${1} /bin/bash
 }
+
+function dexec {
+    docker exec -ti ${1} /bin/bash
+}
+
 function drun {
     MOUNTS="-v /dev/null:/dev/null -v /dev/urandom:/dev/urandom"
     MOUNTS="${MOUNTS} -v /dev/random:/dev/random -v /dev/zero:/dev/zero"
@@ -599,3 +625,7 @@ function drun {
     fi
     docker run -ti --rm --privileged ${MOUNTS} ${1} /bin/bash
 }
+
+## Aliases
+alias add_repo='img_name=$(grep FROM Dockerfile |egrep -o "qnib.*");sed -i -e "s#FROM.*#FROM n36l:5000/${img_name}#" Dockerfile'
+alias rm_repo='img_name=$(grep FROM Dockerfile |egrep -o "qnib.*");sed -i -e "s#FROM.*#FROM ${img_name}#" Dockerfile'
