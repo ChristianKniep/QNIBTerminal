@@ -3,8 +3,7 @@ export QNIB_DNS_HOST=${QNIB_DNS_HOST-dns}
 export QNIB_HOST_SHARE=${QNIB_HOST_SHARE-/data/}
 export QNIB_MAX_MEMORY=${QNIB_MAX_MEMORY-125M}
 export QNIB_LAST_SERVICE_CPUID=${QNIB_LAST_SERVICE_CPUID-1}
-export QNIB_PROJECTS="fd20 supervisor terminal etcd helixdns elk graphite-web"
-export QNIB_PROJECTS="${QNIB_PROJECTS} grafana graphite-api slurm compute slurmctld haproxy carbon qnibng"
+export QNIB_PROJECTS="fd20 supervisor consul terminal influxdb logstash elk grafana"
 export QNIB_IBSIM_NODES=${QNIB_IBSIM_NODES-4}
 export QNIB_IMG_PREFIX=${QNIB_IMG_PREFIX-qnib}
 export DHOST=${DHOST-localhost}
@@ -89,6 +88,40 @@ function dgit_clone {
          popd >/dev/null
       else
          git clone https://github.com/ChristianKniep/docker-${proj}.git
+      fi
+   done
+}
+
+function dgit_push {
+   echo -n "Where to put the git-directories? [.] "
+   read WORKDIR
+   if [ "X${WORKDIR}" == "X" ];then
+      WORKDIR="./"
+   fi
+   for proj in ${QNIB_PROJECTS};do
+      echo "########## docker-${proj}"
+      DIR="${WORKDIR}/docker-${proj}"
+      if [ -d ${DIR} ];then
+         pushd ${DIR} >/dev/null
+         git push
+         popd >/dev/null
+      fi
+   done
+}
+
+function dgit_pull {
+   echo -n "Where to put the git-directories? [.] "
+   read WORKDIR
+   if [ "X${WORKDIR}" == "X" ];then
+      WORKDIR="./"
+   fi
+   for proj in ${QNIB_PROJECTS};do
+      echo "########## docker-${proj}"
+      DIR="${WORKDIR}/docker-${proj}"
+      if [ -d ${DIR} ];then
+         pushd ${DIR} >/dev/null
+         git pull
+         popd >/dev/null
       fi
    done
 }
@@ -598,4 +631,8 @@ function drun {
         MOUNTS=" ${MOUNTS} -v ${SYNC_DIR}:/project/"
     fi
     docker run -ti --rm --privileged ${MOUNTS} ${1} /bin/bash
+}
+
+function dexec {
+    docker exec -ti ${1} /bin/bash
 }
