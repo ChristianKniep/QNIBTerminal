@@ -651,6 +651,10 @@ function dexec {
     docker exec -ti ${1} /bin/bash
 }
 
+function dbuild {
+    docker build --rm -t ${1} .
+}
+
 function drun {
     MOUNTS="-v /dev/null:/dev/null -v /dev/urandom:/dev/urandom"
     MOUNTS="${MOUNTS} -v /dev/random:/dev/random -v /dev/zero:/dev/zero"
