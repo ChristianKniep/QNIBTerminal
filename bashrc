@@ -664,6 +664,16 @@ function drun {
     docker run -ti --rm --privileged ${MOUNTS} ${1} /bin/bash
 }
 
+function fup {
+    fig up -d $@
+}
+function fkill {
+    # Kill fig stack
+    fig kill $@;fig rm --force
+}
+function frecreate {
+    fkill $@;fig up -d --no-recreate
+}
 ## Aliases
 alias add_repo='img_name=$(grep FROM Dockerfile |egrep -o "qnib.*");sed -i -e "s#FROM.*#FROM n36l:5000/${img_name}#" Dockerfile'
 alias rm_repo='img_name=$(grep FROM Dockerfile |egrep -o "qnib.*");sed -i -e "s#FROM.*#FROM ${img_name}#" Dockerfile'
