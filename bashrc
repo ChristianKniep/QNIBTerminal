@@ -664,6 +664,7 @@ function drun {
     docker run -ti --rm --privileged ${MOUNTS} ${1} /bin/bash
 }
 
+## fig
 function fup {
     fig up -d $@
 }
@@ -673,6 +674,18 @@ function fkill {
 }
 function frecreate {
     fkill $@;fig up -d --no-recreate
+}
+## docker-compose
+alias compose="docker-compose"
+function cup {
+    docker-compose up -d $@
+}
+function ckill {
+    # Kill docker-compose stack
+docker-compose kill $@;docker-compose rm --force
+}
+function crecreate {
+    ckill $@;cup --no-recreate
 }
 ## Aliases
 alias add_repo='img_name=$(grep FROM Dockerfile |egrep -o "qnib.*");sed -i -e "s#FROM.*#FROM n36l:5000/${img_name}#" Dockerfile'
