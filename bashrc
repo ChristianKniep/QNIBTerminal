@@ -294,6 +294,7 @@ function drun {
     docker run -ti --rm --privileged ${MOUNTS} ${1} /bin/bash
 }
 
+## fig
 function fup {
     fig up -d $@
 }
@@ -304,7 +305,6 @@ function fkill {
 function frecreate {
     fkill $@;fig up -d --no-recreate
 }
-#### docker-compose
 alias compose="docker-compose"
 function cup {
     docker-compose up -d $@
@@ -430,6 +430,14 @@ function set_ps1 {
         fi)'
 }
 
+function get_default_dhost {
+  	if [ $(machine ls|grep -v ^NAME|wc -l) -eq 1 ];then
+		echo $(machine ls|grep -v ^NAME)
+    else
+        echo $(machine ls|grep "*"|awk '{print $1}')
+    fi 
+       
+}
 function set_dhost {
     if [ "X${1}" != "X" ];then
         docker_host=${1}
@@ -442,8 +450,11 @@ function set_dhost {
     DPORT=6000
     unset DOCKER_CERT_PATH
     unset DOCKER_TLS_VERIFY
-    if [ "X${docker_host}" == "Xlocalhost" ];then
-        export DOCKER_HOST=tcp://localhost:${DPORT}
+    if [ "X${docker_host}" == "X" ];then
+        docker_host=${ACT}
+    elif [ "${docker_host}" == "localhost" ];then
+	    export DOCKER_HOST=unix:///var/run/docker.sock
+ 	    return
     else
         if [ "X${docker_host}" == "X" ];then
             docker_host=${ACT}
@@ -456,8 +467,7 @@ function set_dhost {
             unset DOCKER_TLS_VERIFY
         fi
     fi
-    set_ps1
 }
 export DOCKER_HOST="tcp://${DHOST}:${DPORT}"
-set_dhost $(docker-machine ls|grep "*"|awk '{print $1}')
+set_dhost $(get_default_dhost)
 set_ps1
