@@ -3,9 +3,12 @@ export QNIB_DNS_HOST=${QNIB_DNS_HOST-dns}
 export QNIB_HOST_SHARE=${QNIB_HOST_SHARE-/data/}
 export QNIB_MAX_MEMORY=${QNIB_MAX_MEMORY-125M}
 export QNIB_LAST_SERVICE_CPUID=${QNIB_LAST_SERVICE_CPUID-1}
-export QNIB_BASE_PROJECTS="fd20 supervisor consul terminal logstash elasticsearch redis ls-indexer elk grafana influxdb"
-export QNIB_TERM_PROJECTS="${QNIB_PROJECTS} slurm compute slurmctld haproxy"
-export QNIB_PROJECTS="${QNIB_BASE_PROJECTS} ${QNIB_TERM_PROJECTS}"
+export QNIB_BASE_PROJECTS="fd20 supervisor consul terminal"
+export QNIB_LOG_PROJECTS="logstash elasticsearch logger elk kibana"
+export QNIB_PERF_PROJECTS="influxdb grafana carbon graphite-api"
+export QNIB_INVENTORY_PROJECTS="inventory neo4j"
+export QNIB_COMPUTE_PROJECTS="slurm slurmd slurmctld compute"
+export QNIB_PROJECTS="${QNIB_BASE_PROJECTS} ${QNIB_LOG_PROJECTS} ${QNIB_PERF_PROJECTS} ${QNIB_INVENTORY_PROJECTS} ${QNIB_COMPUTE_PROJECTS}"
 export QNIB_IBSIM_NODES=${QNIB_IBSIM_NODES-4}
 export QNIB_IMG_PREFIX=${QNIB_IMG_PREFIX-qnib}
 export DHOST=${DHOST-localhost}
@@ -23,48 +26,6 @@ export CONT_LIST_INFO="graphite-api graphite-web grafana"
 export CONT_LIST_COMPUTE="slurmctld compute0 compute1"
 # \setup 2.0
 
-function start_qnibterminal {
-   # starts the complete stack
-   if [ "X${1}" != "X" ];then
-      MY_CONT=$*
-   else
-      MY_CONT=${QNIB_CONTAINERS}
-   fi
-   GLOBAL_EC=0
-   for cont in ${MY_CONT};do
-      if [ ${cont} == "dns" ];then
-         IMG_NAME="helixdns"
-      elif [ ${cont} == "compute0" ];then
-         sleep 5
-         IMG_NAME="compute"
-      else
-         IMG_NAME=${cont}
-      fi
-      if [ $(docker ps|egrep -c " qnib/${IMG_NAME}\:") -ne 0 ];then
-         printf "Starting %-20s EC:%-2s CONT_ID:%s || %s\n" ${cont} OK 0 "container already running..."
-         continue
-      fi
-      CONT_ID=$(eval "start_$(echo ${cont}|sed -e 's/-/_/g')")
-      EC=$?
-      if [ $(docker ps|egrep -c " qnib/${IMG_NAME}\:") -ne 1 ];then
-         printf "Starting %-20s EC:%-2s CONT_ID:%s || %s\n" ${cont} NOK ${CONT_ID-X} "container was not started... :("
-         return 1
-      fi
-      GLOBAL_EC=$(echo "${GLOBAL_EC}+${EC}"|bc)
-      CONT_IP=$(d_getip ${cont})
-      printf "Starting %-20s EC:%-2s CONT_IP:%s\n" ${cont} ${EC} ${CONT_IP}
-      if [ ${EC} -ne 0 ];then
-         return ${EC}
-      fi
-      if [ "X${QNIBT_DEBUG}" != "X" ];then
-         echo "[press <enter> to continue]"
-         read
-      else
-         sleep 2
-      fi
-   done
-}
-
 function dgit_check {
    for x in ${QNIB_PROJECTS};do 
        if [ -d docker-${x} ];then
@@ -75,25 +36,6 @@ function dgit_check {
    done
 }
 
-function dgit_push {
-   for x in ${QNIB_PROJECTS};do 
-       if [ -d docker-${x} ];then
-           pushd docker-${x}
-           git push
-           popd
-       fi
-   done
-}
-
-function dgit_pull {
-   for x in ${QNIB_PROJECTS};do 
-       if [ -d docker-${x} ];then
-           pushd docker-${x}
-           git pull
-           popd
-       fi
-   done
-}
 
 function dgit_clone {
    echo -n "Where to put the git-directories? [.] "
@@ -242,72 +184,6 @@ function eval_cpuset {
 
 
 
-function start_nginxproxy {
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${1-0}
-   FORWARD_PORTS="9200 80"
-   OPTS="--privileged"
-   MOUNTS=""
-   start_function nginxproxy ${DETACHED}
-}
-
-function start_qnibng {
-   CON_VOL=""
-   CON_LINKED="carbon elk"
-   DETACHED=${1-0}
-   FORWARD_PORTS=""
-   OPTS="--privileged -e IBSIM_NODES=${QNIB_IBSIM_NODES}"
-   if [ -e /dev/infiniband ];then
-      OPTS="${OPTS} -v /dev/infiniband/:/dev/infiniband/"
-   fi
-   MOUNTS="/home/docker/:/home/docker/"
-   start_function qnibng ${DETACHED}
-}
-
-function start_haproxy {
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${1-0}
-   FORWARD_PORTS="80 9200"
-   MOUNTS=""
-   OPTS=""
-   start_function haproxy ${DETACHED}
-}
-
-function start_grafana {
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${1-0}
-   FORWARD_PORTS=""
-   MOUNTS=""
-   OPTS=""
-   start_function grafana ${DETACHED}
-}
-
-
-function start_slurmctld {
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${1-0}
-   FORWARD_PORTS=""
-   MOUNTS="${QNIB_HOST_SHARE}/chome:/chome"
-   OPTS=""
-   start_function slurmctld ${DETACHED}
-}
-
-function start_ib {
-   CON_VOL=""
-   CON_LINKED=""
-   DETACHED=${2-0}
-   CON_NAME=${1}
-   FORWARD_PORTS=""
-   MOUNTS="${HOST_SHARE}/chome:/chome"
-   OPTS="--privileged -v /dev/infiniband/:/dev/infiniband/"
-   start_function infiniband ${DETACHED} ${CON_NAME}
-
-}
-
 function d_getcpus {
    if [ $# -eq 0 ];then
       CONTAINERS=${QNIB_CONTAINERS}
@@ -315,41 +191,6 @@ function d_getcpus {
       CONTAINERS=$*
    fi
    for comp in ${CONTAINERS};do d_getcpu ${comp};done
-}
-
-function start_comp {
-   #starts slurm container and links with DNS
-   CON_VOL=""
-   CON_LINKED=""
-   IMG_NAME=compute
-   CON_NAME=${1}
-   FORWARD_PORTS=""
-   if [[ "X${1}" != Xcompute* ]] ; then
-      echo "1st argument must be 'compute\d+'"
-      return 1
-   else
-      if [ $(docker ps|egrep -c "${CON_NAME}\s+$") -eq 1 ];then
-         echo "Container already started?!"
-         return 1
-      fi
-   fi
-   DETACHED=${2-0}
-   OPTS="--memory=${QNIB_MAX_MEMORY}"
-   MOUNTS="${QNIB_HOST_SHARE}/chome:/chome"
-   if [ "X${QNIB_IB}" != "X" ];then
-      OPTS="${OPTS} --privileged -v /dev/infiniband/:/dev/infiniband/"
-   fi
-   FORWARD_PORTS=""
-   start_function ${IMG_NAME} ${DETACHED} ${CON_NAME}
-}
-
-
-function d_shutdown {
-   #removes exited container
-   NOT=${1-0}
-   for cont in $(docker ps -a|grep Up|awk '{print $1}'|xargs);do
-      docker stop ${cont}
-   done
 }
 
 function d_garbage_collect {
@@ -369,125 +210,6 @@ function d_garbage_collect {
 }
 
 ## start 2.0
-function set_dockerenv {
-    for item in $(env);do
-        if [[ ${item} == DOCKER_* ]];then
-            key=$(echo ${item}| awk -F\= '{print $1}')
-            val=$(echo ${item}| sed -e "s/${key}\=//")
-                
-            if [ ${key} == "DOCKER_HOST" ];then
-                echo -n "${key}? [${val} # <blank to reset>] "
-                read new
-                export ${key}="${new}"
-            else
-                echo -n "${key}? [${val}] "
-                read new_val
-                if [ "X${new_val}" != "X" ];then
-                    export ${key}="${new_val}"
-                else
-                    export ${key}="${val}"
-                fi
-            fi
-        fi
-    done
-    if [ "X${DOCKER_HOST}" != "X" ];then
-        echo "DOCKER_HOST already set '${DOCKER_HOST}' (unset DOCKER_HOST to proceed)"
-    else
-        echo -n "# Do you have direct access to the docker server '${DOCKER_TARGET}'? [Y/n] "
-        read inp
-        if [ "${inp}" == "n" ];then
-            ask_hop
-            check_hop
-            DTUNNEL_LOCAL_PORT=$(get_free_port)
-            echo "# > create STUNNEL: ${DTUNNEL_LOCAL_PORT}:${DOCKER_TARGET}:${DOCKER_PORT} ${DOCKER_HOP}"
-            ssh -N -f -L ${DTUNNEL_LOCAL_PORT}:${DOCKER_TARGET}:${DOCKER_PORT} ${DOCKER_HOP}
-            export DOCKER_HOST=tcp://localhost:${DTUNNEL_LOCAL_PORT}
-            export DHOST="${DOCKER_HOP}->${DOCKER_TARGET}"
-        else
-            export DHOST="${DOCKER_TARGET}"
-            export DOCKER_HOST=tcp://${DOCKER_TARGET}:${DOCKER_PORT}
-            
-        fi
-        
-    fi
-}
-function d_start {
-   ###### Starts a container
-   ## if $1==1 it will start into a bash
-    if [ "X${INTERACTIVE}" != "X0" ];then
-        if [ "X${INTERACTIVE}" != "X1" ];then
-            CMD=/bin/bash
-        else
-            CMD=${INTERACTIVE}
-        fi
-        docker run -ti --rm ${OPTS} qnib/${CONT_NAME} ${CMD}
-    else
-        printf "# Start %-20s as %-30s > " "'${CONT_NAME}'" "'${USER}_${NAME}'"
-        CONT_ID=$(docker run -d ${OPTS} qnib/${CONT_NAME})
-        EC=$?
-        if [ ${EC} -eq 0 ];then
-            echo "[OK]   IP: $(d_getip ${USER}_${NAME})"
-        else
-            echo "[FAIL] EC: ${EC}"
-        fi
-    fi
-}
-
-function stop_cont {
-    NAME=${1}
-    docker rm -f ${USER}_${NAME}
-}
-
-function start_cont {
-    ## starts container resolve options by name
-    NAME=${1}
-    CONT_NAME=${NAME}
-    OPTS="--name ${USER}_${NAME} -h ${NAME} -p 22 --dns-search=qnib"
-    OPTS="${OPTS} --privileged -v /dev/null:/dev/null -v /dev/random:/dev/random -v /dev/urandom:/dev/urandom"
-    if [ ${NAME} != 'dns' -a $(docker ps |egrep -c "qnib/[a-z]+dns.*${USER}.*$") -eq 1 ];then
-        OPTS="${OPTS} --dns $(d_getip ${USER}_dns)"
-    fi
-    if [ "X${SYNC_DIR}" != "X" ];then
-        OPTS="${OPTS} -v ${SYNC_DIR}:/data/"
-    fi
-    INTERACTIVE=${2-0}
-    case ${NAME} in
-        dns)
-            CONT_NAME="skydns"
-            OPTS="${OPTS} --dns 127.0.0.1"
-            if [ $(docker ps|egrep -c "7001/tcp.*${USER}.*$") -eq 1 ];then
-                OPTS="${OPTS} --link ${USER}_etcd:etcd"
-            fi
-        ;;
-        skydock)
-            OPTS="${OPTS} -v /var/run/docker.sock:/docker.sock"
-        ;;
-        term*)
-            CONT_NAME="terminal"
-        ;;
-        compute*)
-            CONT_NAME="compute"
-        ;;
-        etcd)
-            OPTS="${OPTS} -p 4001 -p 7001"
-        ;;
-        carbon)
-            OPTS="${OPTS} -p 2003 -p 2004 -p 7002 -v /var/lib/carbon/whisper/"
-        ;;
-        graphite-web|graphite-api)
-            OPTS="${OPTS} -p 80 --volumes-from ${USER}_carbon "
-        ;;
-        elk)
-            HTTP_PORT=8080
-            OPTS="${OPTS} -e HTTPPORT=${HTTP_PORT} -p ${HTTP_PORT}:80"
-        ;;
-        grafana)
-            OPTS="${OPTS} -p 80"
-        ;;
-    esac
-    d_start
-}
-
 function qssh_base {
     ### ssh into given container
     # if no name is given fvt is used
@@ -550,98 +272,6 @@ function qscp_from {
 
 
 
-function list_stop {
-    for cont in $*;do
-        stop_cont ${cont}
-    done
-}
-function list_status {
-    for cont in $*;do
-        status_cont ${cont}
-    done
-}
-function list_start {
-    for cont in $*;do
-        start_cont ${cont}
-    done
-}
-function start_qtbase {
-    ### starts the containers needed for qnibterminal
-    list_start ${CONT_LIST_BASE}
-}
-function stop_qtbase {
-    ### starts the containers needed for qnibterminal
-    list_stop ${CONT_LIST_BASE}
-}
-function status_cont {
-    IP=$(d_getip ${USER}_${1})
-    if [ "X${IP}" == "X" ];then
-        return 0
-    fi
-    PORTS=""
-    for line in $(docker inspect -f '{{ .NetworkSettings.Ports }}' ${USER}_${1}|sed -e 's/\ H/_H/g' |sed -e 's/^/"/'|sed -e "s/\]\ /\"\ \"/g"|sed -e 's/$/\"/');do
-        SPORT=$(echo $line|awk -F'] ' '{print $1}'|egrep -o "[0-9]+.*HostPort\:[0-9]+"|awk -F\/ '{print $1}')
-        DPORT=$(echo $line|awk -F'] ' '{print $1}'|egrep -o "[0-9]+.*HostPort\:[0-9]+"|sed -e 's#/tcp##'|awk -F\: '{print $NF}')
-        if [ "X${PORTS}" != "X" ];then
-            PORTS="${PORTS} "
-        fi
-        PORTS="${PORTS}${SPORT}:${DPORT}"
-    done
-    STAT_STR=""
-    STAT_STR="[\e[32mO\e[0m\e[42mE\e[0m\e[34mS\e[91mF\e[93m?\e[0m] "
-    for line in $(qssh ${1} supervisorctl status|awk '{print $1"_"$2}');do
-        PROC=$(echo $line|awk -F_ '{print $1}')
-        STAT=$(echo $line|awk -F_ '{print $2}')
-        case $STAT in
-            RUNNING)
-                STAT_STR=" ${STAT_STR}\e[32m${PROC}\e[0m "
-            ;;
-            EXITED)
-                STAT_STR=" ${STAT_STR}\e[42m${PROC}\e[0m "
-            ;;
-            STOPPED)
-                STAT_STR=" ${STAT_STR}\e[34m${PROC}\e[0m " 
-            ;;
-            FATAL|BACKOFF)
-                STAT_STR=" ${STAT_STR}\e[91m${PROC}\e[0m "
-            ;;
-            STARTING)
-                STAT_STR=" ${STAT_STR}\e[5m\e[32m${PROC}\e[0m "
-            ;;
-            *)
-                STAT_STR=" ${STAT_STR}\e[93m${PROC}\e[0m "
-            ;;
-        esac
-    done
-    printf "%-20s %-20s %-40s ${STAT_STR}\n" "${USER}_${1}" "${IP}" "${PORTS}"
-}
-function status_qtbase {
-    list_status ${CONT_LIST_BASE}
-}
-function start_qtinfo {
-    ### starts the containers needed for qnibterminal
-    list_start ${CONT_LIST_INFO}
-}
-function stop_qtinfo {
-    ### starts the containers needed for qnibterminal
-    list_stop ${CONT_LIST_INFO}
-}
-function start_qtcomp {
-    ### starts the containers needed for qnibterminal
-    list_start ${CONT_LIST_COMPUTE}
-}
-function stop_qtcomp {
-    ### starts the containers needed for qnibterminal
-    list_stop ${CONT_LIST_COMPUTE}
-}
-function start_qt {
-    start_qtbase
-    start_qtinfo
-}
-function stop_qt {
-    stop_qtinfo
-    stop_qtbase
-}
 function drun_pure {
     docker run -ti --rm \
          ${1} /bin/bash
@@ -673,6 +303,18 @@ function fkill {
 }
 function frecreate {
     fkill $@;fig up -d --no-recreate
+}
+#### docker-compose
+alias compose="docker-compose"
+function cup {
+    docker-compose up -d $@
+}
+function ckill {
+    # Kill docker-compose stack
+    docker-compose kill $@;docker-compose rm --force
+}
+function crecreate {
+    ckill $@;docker-compose up -d --no-recreate
 }
 ## Aliases
 alias add_repo='img_name=$(grep FROM Dockerfile |egrep -o "qnib.*");sed -i -e "s#FROM.*#FROM n36l:5000/${img_name}#" Dockerfile'
@@ -792,26 +434,30 @@ function set_dhost {
     if [ "X${1}" != "X" ];then
         docker_host=${1}
     else
-        INACT=$(machine ls|grep -v "NAME"|grep -v "*"|awk '{print $1}'|xargs)
-        ACT=$(machine ls|grep "*"|awk '{print $1}')
+        INACT=$(docker-machine ls|grep -v "NAME"|grep -v "*"|awk '{print $1}'|xargs)
+        ACT=$(docker-machine ls|grep "*"|awk '{print $1}')
         echo -n "Which docker host? [_${ACT}_ / $(echo ${INACT}|sed -e 's# # / #g') ]?"
         read docker_host
     fi
     DPORT=6000
     unset DOCKER_CERT_PATH
     unset DOCKER_TLS_VERIFY
-    if [ "X${docker_host}" == "X" ];then
-        docker_host=${ACT}
+    if [ "X${docker_host}" == "Xlocalhost" ];then
+        export DOCKER_HOST=tcp://localhost:${DPORT}
     else
-        machine active ${docker_host}
-    fi
-    $(machine env ${docker_host})
-    if [ "$(machine ls|grep ^${docker_host}|awk '{print $3}')" == "none" ];then
-        unset DOCKER_CERT_PATH
-        unset DOCKER_TLS_VERIFY
+        if [ "X${docker_host}" == "X" ];then
+            docker_host=${ACT}
+        else 
+            machine active ${docker_host}
+        fi
+        eval "$(docker-machine env ${docker_host})"
+        if [ "$(docker-machine ls|grep ^${docker_host}|awk '{print $3}')" == "none" ];then
+            unset DOCKER_CERT_PATH
+            unset DOCKER_TLS_VERIFY
+        fi
     fi
     set_ps1
 }
 export DOCKER_HOST="tcp://${DHOST}:${DPORT}"
-set_dhost $(machine ls|grep "*"|awk '{print $1}')
+set_dhost $(docker-machine ls|grep "*"|awk '{print $1}')
 set_ps1
