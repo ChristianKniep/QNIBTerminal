@@ -421,6 +421,9 @@ function set_ps1 {
     PS_RC="rc=$?"
     PS_CWD="$Cyan\W"
     DHOST=$(echo $DOCKER_HOST |sed -e 's#tcp://##'|awk -F\. '{print $1}')
+    if [ $(echo ${DHOST} | egrep -c "^\d+$") -eq 1 ];then
+        DHOST=$(machine ls|grep ${DOCKER_HOST}|cut -d' ' -f 1)
+    fi
     if [ "X${DHOST}" == "X" ];then
         DOCKERH="${Yellow}DOCKER${Color_Off}"
     else
@@ -463,7 +466,7 @@ function get_dckr_cfg {
         elif [ $(egrep -c "^${1}\s+" ~/.docker_hosts) -gt 1 ];then
             echo "[ERROR] More then one match..."
             return 2
-        elif [ $(egrep -c ".*\s+DEFAULT$" ~/.docker_hosts) -eq 1 ];then
+        elif [ "X${1}" == "X"  -a  $(egrep -c ".*\s+DEFAULT$" ~/.docker_hosts) -eq 1 ];then
             echo $(egrep ".*\s+DEFAULT$" ~/.docker_hosts | cut -d' ' -f 2)
             return 0
         else
@@ -500,7 +503,7 @@ function set_dhost {
     elif [ "${DCKR_HOST}" == "localhost" ];then
 	    export DOCKER_HOST=unix:///var/run/docker.sock
  	    return
-    elif [ "X${DOCKER_PORT}" != "X" ];then
+    elif [ "X${DCKR_PORT}" != "X" ];then
         # we got a port, so we are good
         export DOCKER_HOST=tcp://${DCKR_HOST}:${DCKR_PORT}
         if [ "X${DCKR_CA}" != "X" ];then
