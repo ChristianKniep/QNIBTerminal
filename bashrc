@@ -458,11 +458,14 @@ function get_dckr_cfg {
     # - if ca_cert_dir is set TLS is activated, otherwise it's not
     if [ -f ~/.docker_hosts ];then
         if [ $(egrep -c "^${1}\s+" ~/.docker_hosts) -eq 1 ];then
-            echo $(egrep "^${1}\s+" ~/.docker_hosts | awk '{print $2}')
+            echo $(egrep "^${1}\s+" ~/.docker_hosts | cut -d' ' -f 2-)
             return 0
         elif [ $(egrep -c "^${1}\s+" ~/.docker_hosts) -gt 1 ];then
             echo "[ERROR] More then one match..."
             return 2
+        elif [ $(egrep -c ".*\s+DEFAULT$" ~/.docker_hosts) -eq 1 ];then
+            echo $(egrep ".*\s+DEFAULT$" ~/.docker_hosts | cut -d' ' -f 2)
+            return 0
         else
             echo "no match"
             return 1
