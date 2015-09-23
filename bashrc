@@ -282,7 +282,12 @@ function dexec {
 }
 
 function dbuild {
-    docker build --rm -t ${1} .
+    docker build --rm ${2} -t ${1} .
+    if [ "X${DOCKER_REG}" != "X" ];then
+        echo ">> docker tag -f ${1} ${DOCKER_REG}/${1}"
+        docker tag -f ${1} ${DOCKER_REG}/${1}
+        docker push ${DOCKER_REG}/${1}
+    fi
 }
 
 function drun {
@@ -307,11 +312,19 @@ function frecreate {
 }
 alias compose="docker-compose"
 function cup {
-    docker-compose up -d $@
+    CFILE=""
+    if [ "X${COMPOSE_FILE}" != "X" ];then
+        CFILE="-f ${COMPOSE_FILE}"
+    fi
+    docker-compose ${CFILE} up -d $@
 }
 function ckill {
     # Kill docker-compose stack
-    docker-compose kill $@;docker-compose rm --force
+    CFILE=""
+    if [ "X${COMPOSE_FILE}" != "X" ];then
+        CFILE="-f ${COMPOSE_FILE}"
+    fi
+    docker-compose ${CFILE} kill $@;docker-compose ${CFILE} rm --force
 }
 function crecreate {
     ckill $@;docker-compose up -d --no-recreate
@@ -407,10 +420,9 @@ function set_ps1 {
     PS_TIME="\[\e[1m\]\# \t"
     PS_RC="rc=$?"
     PS_CWD="$Cyan\W"
-    DHOST=$(machine ls |grep "*"|awk '{print $1}')
+    DHOST=$(echo $DOCKER_HOST |sed -e 's#tcp://##'|awk -F\. '{print $1}')
     if [ "X${DHOST}" == "X" ];then
-        DHOST=$(machine ls |grep "Running"|awk '{print $1}'|xargs)
-        DOCKERH="${Yellow}DOCKER:${DHOST}${Color_Off}"
+        DOCKERH="${Yellow}DOCKER${Color_Off}"
     else
         DOCKERH="${Green}DOCKER:${DHOST}${Color_Off}"
     fi
@@ -438,31 +450,68 @@ function get_default_dhost {
     fi 
        
 }
+
+function get_dckr_cfg {
+    #### checks for ~/.docker_hosts file and fetches configuration for given alias
+    # format:
+    #    <alias> <host/ip>:port[:ca_cert_dir]
+    # - if ca_cert_dir is set TLS is activated, otherwise it's not
+    if [ -f ~/.docker_hosts ];then
+        if [ $(egrep -c "^${1}\s+" ~/.docker_hosts) -eq 1 ];then
+            echo $(egrep "^${1}\s+" ~/.docker_hosts | awk '{print $2}')
+            return 0
+        elif [ $(egrep -c "^${1}\s+" ~/.docker_hosts) -gt 1 ];then
+            echo "[ERROR] More then one match..."
+            return 2
+        else
+            echo "no match"
+            return 1
+        fi
+    else
+        echo "Couldn't find '~/.docker_hosts'..."
+    fi
+}
+
 function set_dhost {
-    if [ "X${1}" != "X" ];then
-        docker_host=${1}
+    DCKR_PORT=
+    DCKR_CFG=$(get_dckr_cfg $1)
+    EC=$?
+    if [ ${EC} -eq 0 ];then
+        DCKR_HOST=$(echo ${DCKR_CFG}|awk -F\: '{print $1}')
+        DCKR_PORT=$(echo ${DCKR_CFG}|awk -F\: '{print $2}')
+        DCKR_CA=$(echo ${DCKR_CFG}|awk -F\: '{print $3}')
+    elif [ ${EC} -eq 2 ];then
+        return 2
+    elif [ "X${1}" != "X" ];then
+        DCKR_HOST=${1}
     else
         INACT=$(docker-machine ls|grep -v "NAME"|grep -v "*"|awk '{print $1}'|xargs)
         ACT=$(docker-machine ls|grep "*"|awk '{print $1}')
         echo -n "Which docker host? [_${ACT}_ / $(echo ${INACT}|sed -e 's# # / #g') ]?"
         read docker_host
     fi
-    DPORT=6000
     unset DOCKER_CERT_PATH
     unset DOCKER_TLS_VERIFY
-    if [ "X${docker_host}" == "X" ];then
-        docker_host=${ACT}
-    elif [ "${docker_host}" == "localhost" ];then
+    if [ "X${DCKR_HOST}" == "X" ];then
+        DCKR_HOST=${ACT}
+    elif [ "${DCKR_HOST}" == "localhost" ];then
 	    export DOCKER_HOST=unix:///var/run/docker.sock
  	    return
-    else
-        if [ "X${docker_host}" == "X" ];then
-            docker_host=${ACT}
-        else 
-            machine active ${docker_host}
+    elif [ "X${DOCKER_PORT}" != "X" ];then
+        # we got a port, so we are good
+        export DOCKER_HOST=tcp://${DCKR_HOST}:${DCKR_PORT}
+        if [ "X${DCKR_CA}" != "X" ];then
+            export DOCKER_TLS_VERIFY=1
+            export DOCKER_CERT_PATH=${DCKR_CA} 
         fi
-        eval "$(docker-machine env ${docker_host})"
-        if [ "$(docker-machine ls|grep ^${docker_host}|awk '{print $3}')" == "none" ];then
+    else
+        if [ "X${DCKR_HOST}" == "X" ];then
+            DCKR_HOST=${ACT}
+        #else 
+        #    machine active ${DCKR_HOST}
+        fi
+        eval "$(docker-machine env ${DCKR_HOST})"
+        if [ "$(docker-machine ls|grep ^${DCKR_HOST}|awk '{print $3}')" == "none" ];then
             unset DOCKER_CERT_PATH
             unset DOCKER_TLS_VERIFY
         fi
