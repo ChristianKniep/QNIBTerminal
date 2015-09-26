@@ -486,6 +486,7 @@ function get_dckr_cfg {
         fi
     else
         echo "Couldn't find '~/.docker_hosts'..."
+        return 1
     fi
 }
 
