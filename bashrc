@@ -410,25 +410,35 @@ function set_ps1 {
     DHOST=$(machine ls |grep "*"|awk '{print $1}')
     if [ "X${DHOST}" == "X" ];then
         DHOST=$(machine ls |grep "Running"|awk '{print $1}'|xargs)
-        DOCKERH="${Yellow}DOCKER:${DHOST}${Color_Off}"
+        DOCKERH="${Yellow}${DHOST}${Color_Off}"
     else
-        DOCKERH="${Green}DOCKER:${DHOST}${Color_Off}"
+        DOCKERH="${Green}${DHOST}${Color_Off}"
     fi
-    export PS1=${PS_TIME}" "${PS_RC}" ${DOCKERH} "${PS_CWD}'$(git branch &>/dev/null;\
-        if [ $? -eq 0 ]; then \
-            echo "$(echo `git status` | grep "nothing to commit" > /dev/null 2>&1; \
-            if [ "$?" -eq "0" ]; then \
-                # @4 - Clean repository - nothing to commit
-                echo "'$Green'"$(__git_ps1 " (%s)"); \
+    if [ "X${ITERM_PROFILE}" == "XPresentation" ];then
+        export PS1="${DOCKERH}\$ "
+    else
+        export PS1=${PS_TIME}" "${PS_RC}" ${DOCKERH} "${PS_CWD}'$(git branch &>/dev/null;\
+            if [ $? -eq 0 ]; then \
+                echo "$(echo `git status` | grep "nothing to commit" > /dev/null 2>&1; \
+                if [ "$?" -eq "0" ]; then \
+                    # @4 - Clean repository - nothing to commit
+                    echo "'$Green'"$(__git_ps1 " (%s)"); \
+                else \
+                    # @5 - Changes to working tree
+                    echo "'$IRed'"$(__git_ps1 " {%s}"); \
+                fi) '$Color_Off'\$ "; \
             else \
-                # @5 - Changes to working tree
-                echo "'$IRed'"$(__git_ps1 " {%s}"); \
-            fi) '$Color_Off'\$ "; \
-        else \
-            # @2 - Prompt when not in GIT repo
-            echo " '$Color_Off'\$ "; \
-        fi)'
+                # @2 - Prompt when not in GIT repo
+                echo " '$Color_Off'\$ "; \
+            fi)'
+    fi
 }
+#function set_ps1 {
+#    NXT_PS1=$(get_ps1)
+#    if [ "XX${PS1}" != "XX${NXT_PS1}" ];then
+#        export PS1="${NXT_PS1} "
+#    fi
+#}
 
 function get_default_dhost {
   	if [ $(machine ls|grep -v ^NAME|wc -l) -eq 1 ];then
@@ -467,6 +477,7 @@ function set_dhost {
             unset DOCKER_TLS_VERIFY
         fi
     fi
+    set_ps1
 }
 export DOCKER_HOST="tcp://${DHOST}:${DPORT}"
 set_dhost $(get_default_dhost)
