@@ -329,9 +329,36 @@ function ckill {
 function crecreate {
     ckill $@;docker-compose up -d --no-recreate
 }
+
+# add registry
+function add_reg {
+    IMG_NAME=$(grep ^FROM Dockerfile|awk '{print $2}')
+    if [ $(echo ${IMG_NAME} | grep -o "/" | wc -l) -gt 2 ];then
+        echo "Sure you wanna add the registry? Looks not right: ${IMG_NAME}"
+    elif [ $(echo ${IMG_NAME} | grep -o "/" | wc -l) -eq 0 ];then
+        echo "Image is an official one, so we skip it '${IMG_NAME}'"
+    else
+        if [ -z ${DOCKER_REG} ];then
+            echo -n "The registry name? "
+            read DOCKER_REG
+            export DOCKER_REG=${DOCKER_REG}
+        fi
+        sed -i '' -e "s#FROM.*#FROM ${DOCKER_REG}/${IMG_NAME}#" Dockerfile
+   fi
+}
+# remove reg
+function rm_reg {
+    IMG_NAME=$(grep ^FROM Dockerfile|awk '{print $2}')
+    if [ $(echo ${IMG_NAME} | grep -o "/" | wc -l) -eq 2 ];then
+        NEW_NAME=$(echo ${IMG_NAME} | awk -F/ '{print $2"/"$3}') 
+        sed -i '' -e "s#FROM.*#FROM ${NEW_NAME}#" Dockerfile
+    else
+        echo ${IMG_NAME}
+    fi
+}
+
+
 ## Aliases
-alias add_repo='img_name=$(grep FROM Dockerfile |egrep -o "qnib.*");sed -i -e "s#FROM.*#FROM n36l:5000/${img_name}#" Dockerfile'
-alias rm_repo='img_name=$(grep FROM Dockerfile |egrep -o "qnib.*");sed -i -e "s#FROM.*#FROM ${img_name}#" Dockerfile'
 
 # color
 # Reset
