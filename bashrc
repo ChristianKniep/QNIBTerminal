@@ -332,7 +332,14 @@ function crecreate {
 
 # add registry
 function add_reg {
-    IMG_NAME=$(grep ^FROM Dockerfile|awk '{print $2}')
+    if [ -f Dockerfile ];then
+       add_reg_to_dockerfile
+    elif [ -f docker-compose.yml ];then
+       add_reg_to_compose
+    fi
+}
+function add_reg_to_dockerfile {
+    IMG_NAME=$(grep ^FROM Dockerfile | awk '{print $2}')
     if [ $(echo ${IMG_NAME} | grep -o "/" | wc -l) -gt 2 ];then
         echo "Sure you wanna add the registry? Looks not right: ${IMG_NAME}"
     elif [ $(echo ${IMG_NAME} | grep -o "/" | wc -l) -eq 0 ];then
@@ -343,17 +350,32 @@ function add_reg {
             read DOCKER_REG
             export DOCKER_REG=${DOCKER_REG}
         fi
-        sed -i '' -e "s#FROM.*#FROM ${DOCKER_REG}/${IMG_NAME}#" Dockerfile
+        sed -i '' -e "s#FROM.*#FROM ${DOCKER_REG}/${IMG_NAME}#" ${1-Dockerfile}
    fi
 }
-# remove reg
-function rm_reg {
+function add_reg_to_compose {
+   sed -i '' -e "s#image: \(.*\)#image: ${DOCKER_REG}/\1#" ${1-docker-compose.yml}
+}
+
+####  remove DOCKER_REG from files
+function rm_reg_from_dockerfile {
+
     IMG_NAME=$(grep ^FROM Dockerfile|awk '{print $2}')
     if [ $(echo ${IMG_NAME} | grep -o "/" | wc -l) -eq 2 ];then
         NEW_NAME=$(echo ${IMG_NAME} | awk -F/ '{print $2"/"$3}') 
         sed -i '' -e "s#FROM.*#FROM ${NEW_NAME}#" Dockerfile
     else
         echo ${IMG_NAME}
+    fi
+}
+function rm_reg_from_compose {
+   sed -i '' -E 's#image\:.*/([a-z0-9]+/[a-z0-9\-\:]+)#image: \1#' docker-compose.yml
+}
+function rm_reg {
+    if [ -f Dockerfile ];then
+       rm_reg_from_dockerfile
+    elif [ -f docker-compose.yml ];then
+       rm_reg_from_compose
     fi
 }
 
