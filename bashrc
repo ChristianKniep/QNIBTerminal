@@ -278,7 +278,14 @@ function drun_pure {
 }
 
 function dexec {
-    docker exec -ti ${1} /bin/bash
+    img=$1
+    if [ "$#" -eq 1 ];then
+        exe=bash
+    else
+        shift
+        exe="$@"
+    fi
+    docker exec -ti ${img} ${exe}
 }
 
 function dbuild {
