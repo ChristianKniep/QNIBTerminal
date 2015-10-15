@@ -334,8 +334,12 @@ function crecreate {
 function add_reg {
     if [ -f Dockerfile ];then
        add_reg_to_dockerfile
-    elif [ -f docker-compose.yml ];then
+    fi
+    if [ -f docker-compose.yml ];then
        add_reg_to_compose
+    fi
+    if [ -f base.yml ];then
+       add_reg_to_compose base.yml
     fi
 }
 function add_reg_to_dockerfile {
@@ -359,7 +363,6 @@ function add_reg_to_compose {
 
 ####  remove DOCKER_REG from files
 function rm_reg_from_dockerfile {
-
     IMG_NAME=$(grep ^FROM Dockerfile|awk '{print $2}')
     if [ $(echo ${IMG_NAME} | grep -o "/" | wc -l) -eq 2 ];then
         NEW_NAME=$(echo ${IMG_NAME} | awk -F/ '{print $2"/"$3}') 
@@ -369,13 +372,17 @@ function rm_reg_from_dockerfile {
     fi
 }
 function rm_reg_from_compose {
-   sed -i '' -E 's#image\:.*/([a-z0-9]+/[a-z0-9\-\:]+)#image: \1#' docker-compose.yml
+   sed -i '' -E 's#image\:.*/([a-z0-9]+/[a-z0-9\-\:]+)#image: \1#' ${1-docker-compose.yml}
 }
 function rm_reg {
     if [ -f Dockerfile ];then
        rm_reg_from_dockerfile
-    elif [ -f docker-compose.yml ];then
+    fi
+    if [ -f docker-compose.yml ];then
        rm_reg_from_compose
+    fi
+    if [ -f base.yml ];then
+       rm_reg_from_compose base.yml
     fi
 }
 
