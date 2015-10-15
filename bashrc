@@ -278,7 +278,14 @@ function drun_pure {
 }
 
 function dexec {
-    docker exec -ti ${1} /bin/bash
+    img=$1
+    if [ "$#" -eq 1 ];then
+        exe=bash
+    else
+        shift
+        exe="$@"
+    fi
+    docker exec -ti ${img} ${exe}
 }
 
 function dbuild {
@@ -513,7 +520,10 @@ function set_ps1 {
 #}
 
 function get_default_dhost {
-  	if [ $(machine ls|grep -v ^NAME|wc -l) -eq 1 ];then
+    touch ~/.docker_hosts
+    if [ "X${1}" == "X"  -a  $(egrep -c ".*\s+DEFAULT$" ~/.docker_hosts) -eq 1 ];then
+         echo $(egrep ".*\s+DEFAULT$" ~/.docker_hosts | cut -d' ' -f 2)
+  	elif [ $(machine ls|grep -v ^NAME|wc -l) -eq 1 ];then
 		echo $(machine ls|grep -v ^NAME)
     else
         echo $(machine ls|grep "*"|awk '{print $1}')
