@@ -36,6 +36,15 @@ function dgit_check {
    done
 }
 
+function dbranch {
+    cur=$(git branch|grep "^*"|awk '{print $2}')
+    for br in $(git branch|egrep -o "[0-9a-z\.\-]+$");do
+        git checkout ${br}
+        dbuild ${1}:${br}
+    done
+    git checkout ${cur}
+}
+
 
 function dgit_clone {
    echo -n "Where to put the git-directories? [.] "
@@ -538,7 +547,7 @@ function get_dckr_cfg {
     # - if ca_cert_dir is set TLS is activated, otherwise it's not
     if [ -f ~/.docker_hosts ];then
         if [ $(egrep -c "^${1}\s+" ~/.docker_hosts) -eq 1 ];then
-            echo $(egrep "^${1}\s+" ~/.docker_hosts | cut -d' ' -f 2-)
+            echo $(egrep "^${1}\s+" ~/.docker_hosts | cut -d' ' -f 2)
             return 0
         elif [ $(egrep -c "^${1}\s+" ~/.docker_hosts) -gt 1 ];then
             echo "[ERROR] More then one match..."
