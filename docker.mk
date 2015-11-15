@@ -1,5 +1,3 @@
-TAGS=latest
-
 build:
 	@for tag in $(TAGS); do \
 		if [ $$tag == "latest" ];then \
