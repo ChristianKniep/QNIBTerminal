@@ -114,3 +114,6 @@ openldap: u-terminal
 
 etcd: terminal
 	$(DOCKER_BUILD)
+
+qnibng: terminal
+	$(DOCKER_BUILD)
