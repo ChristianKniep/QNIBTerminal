@@ -1,32 +1,35 @@
+PLAIN_BUILD=cd ~/docker/$@; git checkout master; $(MAKE)
+DOCKER_BUILD=cd ~/docker/docker-$@; git checkout master; $(MAKE)
+
 d-supervisor:
-	cd ~/docker/$@; $(MAKE)
+	$(PLAIN_BUILD)
 
 d-syslog: d-supervisor
-	cd ~/docker/$@; $(MAKE)
+	$(PLAIN_BUILD)
 
 d-consul: d-syslog
-	cd ~/docker/$@; $(MAKE)
+	$(PLAIN_BUILD)
 
 d-terminal: d-consul
-	cd ~/docker/$@; $(MAKE)
+	$(PLAIN_BUILD)
 
 d-node: d-terminal
-	cd ~/docker/$@; $(MAKE)
+	$(PLAIN_BUILD)
 
 u-supervisor:
-	cd ~/docker/$@; $(MAKE)
+	$(PLAIN_BUILD)
 
 u-syslog: u-supervisor
-	cd ~/docker/$@; $(MAKE)
+	$(PLAIN_BUILD)
 
 u-consul: u-syslog
-	cd ~/docker/$@; $(MAKE)
+	$(PLAIN_BUILD)
 
 u-terminal: u-consul
-	cd ~/docker/$@; $(MAKE)
+	$(PLAIN_BUILD)
 
-d-node: d-terminal
-	cd ~/docker/$@; $(MAKE)
+convert: u-terminal
+	$(DOCKER_BUILD)
 
 rocketchat: d-node
 	cd ~/docker/docker-$@; $(MAKE)
@@ -77,7 +80,7 @@ fullerite: terminal
 	cd ~/docker/docker-$@; $(MAKE)
 
 java7: terminal
-	cd ~/docker/$@; $(MAKE)
+	cd ~/docker/docker-$@; $(MAKE)
 
 java8: terminal
 	cd ~/docker/docker-$@; $(MAKE)
@@ -107,4 +110,7 @@ kafka-monitor: java7
 	cd ~/docker/docker-$@; $(MAKE)
 
 openldap: u-terminal
-	cd ~/docker/docker-$@; $(MAKE)
+	$(DOCKER_BUILD)
+
+etcd: terminal
+	$(DOCKER_BUILD)
