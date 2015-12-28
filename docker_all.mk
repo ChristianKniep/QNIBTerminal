@@ -85,6 +85,9 @@ java7: terminal
 java8: terminal
 	cd ~/docker/docker-$@; $(MAKE)
 
+chronix: java8
+	cd ~/docker/docker-$@; $(MAKE)
+
 mongodb: terminal
 	cd ~/docker/docker-$@; $(MAKE)
 
