@@ -46,7 +46,10 @@ supervisor: fedora
 syslog: supervisor
 	cd ~/docker/docker-$@; $(MAKE)
 
-consul: syslog
+bats: syslog
+	cd ~/docker/docker-$@; $(MAKE)
+
+consul: bats
 	cd ~/docker/docker-$@; $(MAKE)
 
 diamond: consul
@@ -86,6 +89,9 @@ java7: terminal
 	cd ~/docker/docker-$@; $(MAKE)
 
 java8: terminal
+	cd ~/docker/docker-$@; $(MAKE)
+
+chronix: java8
 	cd ~/docker/docker-$@; $(MAKE)
 
 mongodb: terminal
