@@ -43,7 +43,10 @@ supervisor:
 syslog: supervisor
 	cd ~/docker/docker-$@; $(MAKE)
 
-consul: syslog
+bats: syslog
+	cd ~/docker/docker-$@; $(MAKE)
+
+consul: bats
 	cd ~/docker/docker-$@; $(MAKE)
 
 diamond: consul
