@@ -37,7 +37,10 @@ rocketchat: d-node
 hubot-rocketchat: d-node
 	cd ~/docker/docker-$@; $(MAKE)
 
-supervisor: 
+fedora:
+	$(DOCKER_BUILD)
+
+supervisor: fedora
 	cd ~/docker/docker-$@; $(MAKE)
 
 syslog: supervisor
@@ -117,3 +120,22 @@ etcd: terminal
 
 qnibng: terminal
 	$(DOCKER_BUILD)
+
+cluster: terminal
+	$(DOCKER_BUILD)
+
+slurm: cluster
+	$(DOCKER_BUILD)
+
+slurmctld: slurm
+	$(DOCKER_BUILD)
+
+slurmd: slurm
+	$(DOCKER_BUILD)
+
+compute: slurmd
+	$(DOCKER_BUILD)
+
+hpcg: compute
+	$(DOCKER_BUILD)
+
