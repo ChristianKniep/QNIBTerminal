@@ -1,5 +1,10 @@
 build:
 	@for tag in $(TAGS); do \
+		if [ "X$(build_tag)" != "X" ];then \
+			if [ $(build_tag) != $$tag ];then \
+				continue; \
+            fi; \
+		fi; \
 		if [ $$tag == "latest" ];then \
 			branch="master"; \
 		else \
