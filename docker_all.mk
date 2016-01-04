@@ -106,6 +106,9 @@ zkui: java7
 hadoop: java7
 	cd ~/docker/docker-$@; $(MAKE)
 	
+samza: hadoop
+	$(DOCKER_BUILD)
+
 hbase: hadoop
 	cd ~/docker/docker-$@; $(MAKE)
 
@@ -144,4 +147,5 @@ compute: slurmd
 
 hpcg: compute
 	$(DOCKER_BUILD)
+
 
