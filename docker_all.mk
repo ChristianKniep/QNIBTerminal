@@ -28,6 +28,9 @@ u-consul: u-syslog
 u-terminal: u-consul
 	$(PLAIN_BUILD)
 
+u-samza: u-terminal
+	$(PLAIN_BUILD)
+
 convert: u-terminal
 	$(DOCKER_BUILD)
 
