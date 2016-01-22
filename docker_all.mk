@@ -52,8 +52,11 @@ bats: syslog
 consul: bats
 	cd ~/docker/docker-$@; $(MAKE)
 
-diamond: consul
-	cd ~/docker/docker-$@; $(MAKE)
+sensu: consul
+	cd ~/docker/docker-$@; $(make)
+
+diamond: sensu
+	cd ~/docker/docker-$@; $(make)
 
 terminal: diamond
 	cd ~/docker/docker-$@; $(MAKE)
