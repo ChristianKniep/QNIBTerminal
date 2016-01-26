@@ -489,7 +489,7 @@ Jobs="\j"
 
 ## create PS1
 function set_ps1 {
-    PS_TIME="\[\e[1m\]\h \t"
+    PS_STUB="\[\e[1m\]\h "
     PS_RC="rc=$?"
     PS_CWD="$Cyan\W"
     DHOST=$(echo $DOCKER_HOST |sed -e 's#tcp://##'|awk -F\. '{print $1}')
