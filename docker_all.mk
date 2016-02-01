@@ -127,6 +127,9 @@ kafka: jmxtrans7
 jmxtrans7: java7
 	cd ~/docker/docker-$@; $(MAKE)
 
+kafka-manager: java7
+	cd ~/docker/docker-$@; $(MAKE)
+
 kafka-monitor: java7
 	cd ~/docker/docker-$@; $(MAKE)
 
