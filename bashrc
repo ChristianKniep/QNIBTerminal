@@ -299,10 +299,15 @@ function dexec {
 
 function dbuild {
     docker build --rm ${2} -t ${1} .
-    if [ "X${DOCKER_REG}" != "X" ];then
-        echo ">> docker tag -f ${1} ${DOCKER_REG}/${1}"
-        docker tag -f ${1} ${DOCKER_REG}/${1}
-        docker push ${DOCKER_REG}/${1}
+    EC=$?
+    if [ ${EC} -eq 0 ];then
+        if [ "X${DOCKER_REG}" != "X" ];then
+            echo ">> docker tag -f ${1} ${DOCKER_REG}/${1}"
+            docker tag -f ${1} ${DOCKER_REG}/${1}
+            docker push ${DOCKER_REG}/${1}
+        fi
+    else
+        echo "[ERROR] docker build failed... :/"
     fi
 }
 

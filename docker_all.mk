@@ -118,7 +118,10 @@ hbase: hadoop
 opentsdb: hbase
 	cd ~/docker/docker-$@; $(MAKE)
 
-kafka: java7
+jmxtrans7: java7
+	$(DOCKER_BUILD)
+
+kafka: jmxtrans7
 	cd ~/docker/docker-$@; $(MAKE)
 
 kafka-monitor: java7
