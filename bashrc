@@ -494,7 +494,7 @@ Jobs="\j"
 
 ## create PS1
 function set_ps1 {
-    PS_TIME="\[\e[1m\]\# \t"
+    PS_STUB="\[\e[1m\]\h"
     PS_RC="rc=$?"
     PS_CWD="$Cyan\W"
     DHOST=$(echo $DOCKER_HOST |sed -e 's#tcp://##'|awk -F\. '{print $1}')
@@ -510,7 +510,7 @@ function set_ps1 {
     if [ "X${ITERM_PROFILE}" == "XPresentation" ];then
         export PS1="${DOCKERH}\$ "
     else
-        export PS1=${PS_TIME}" "${PS_RC}" ${DOCKERH} "${PS_CWD}'$(git branch &>/dev/null;\
+        export PS1=${PS_STUB}" "${PS_RC}" ${DOCKERH} "${PS_CWD}'$(git branch &>/dev/null;\
             if [ $? -eq 0 ]; then \
                 echo "$(echo `git status` | grep "nothing to commit" > /dev/null 2>&1; \
                 if [ "$?" -eq "0" ]; then \
