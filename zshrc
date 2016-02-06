@@ -1,3 +1,7 @@
+## Alias
+alias gs='git status'
+
+
 export DHOST=${DHOST-localhost}
 export QNIB_REG=${QNIB_REG}
 
@@ -224,11 +228,6 @@ function dbuild {
 }
 
 function drun {
-    MOUNTS="-v /dev/null:/dev/null -v /dev/urandom:/dev/urandom"
-    MOUNTS="${MOUNTS} -v /dev/random:/dev/random -v /dev/zero:/dev/zero"
-    if [ "X${SYNC_DIR}" != "X" ];then
-        MOUNTS=" ${MOUNTS} -v ${SYNC_DIR}:/project/"
-    fi
     docker run -ti --rm --privileged ${MOUNTS} ${1} /bin/bash
 }
 
