@@ -121,10 +121,10 @@ hbase: hadoop
 opentsdb: hbase
 	cd ~/docker/docker-$@; $(MAKE)
 
-kafka: jmxtrans7
-	cd ~/docker/docker-$@; $(MAKE)
-
 jmxtrans7: java7
+	$(DOCKER_BUILD)
+
+kafka: jmxtrans7
 	cd ~/docker/docker-$@; $(MAKE)
 
 kafka-manager: java7
