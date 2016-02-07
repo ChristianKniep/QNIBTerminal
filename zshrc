@@ -219,6 +219,7 @@ function dexec {
 }
 
 function dbuild {
+    echo "> docker build '${1}'"
     docker build --rm ${2} -t ${1} .
     if [ "X${DOCKER_REG}" != "X" ];then
         echo ">> docker tag -f ${1} ${DOCKER_REG}/${1}"

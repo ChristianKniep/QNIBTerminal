@@ -1,6 +1,8 @@
 PLAIN_BUILD=cd ~/docker/$@; git checkout master; $(MAKE)
 DOCKER_BUILD=cd ~/docker/docker-$@; git checkout master; $(MAKE)
 
+include ~/src/github.com/ChristianKniep/QNIBTerminal/docker_alpine.mk
+
 d-supervisor:
 	$(PLAIN_BUILD)
 
