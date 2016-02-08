@@ -1,5 +1,6 @@
 ## Alias
 alias gs='git status'
+alias machine='docker-machine'
 
 
 export DHOST=${DHOST-localhost}
@@ -360,9 +361,9 @@ function set_dhost {
         DCKR_HOST=${1}
     else
         INACT=$(docker-machine ls|grep -v "NAME"|grep -v "*"|awk '{print $1}'|xargs)
-        ACT=$(docker-machine ls|grep "*"|awk '{print $1}')
+        ACT=$(docker-machine active)
         echo -n "Which docker host? [_${ACT}_ / $(echo ${INACT}|sed -e 's# # / #g') ]?"
-        read docker_host
+        read DCKR_HOST
     fi
     unset DOCKER_CERT_PATH
     unset DOCKER_TLS_VERIFY
