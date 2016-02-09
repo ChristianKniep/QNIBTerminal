@@ -28,3 +28,7 @@ d-java7: d-terminal
 d-hadoop: d-java7
 	$(QNIB_CHECKOUT)
 	$(PLAIN_BUILD)
+
+d-yarn: d-java7
+	$(QNIB_CHECKOUT)
+	$(PLAIN_BUILD)
