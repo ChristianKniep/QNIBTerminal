@@ -1,4 +1,4 @@
-.PHONY: d-hadoop d-java7 d-terminal d-supervisor d-syslog d-consul d-terminal d-node rocketchat hubot-rocketchat
+.PHONY: d-hadoop d-yarn d-java7 d-terminal d-supervisor d-syslog d-consul d-terminal d-node rocketchat hubot-rocketchat
 
 d-supervisor:
 	$(PLAIN_BUILD)
