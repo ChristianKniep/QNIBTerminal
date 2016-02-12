@@ -1,22 +1,10 @@
-PLAIN_BUILD=cd ~/docker/$@; git checkout master; $(MAKE)
-DOCKER_BUILD=cd ~/docker/docker-$@; git checkout master; $(MAKE)
+PLAIN_BUILD=cd ~/docker/$@; git checkout master; git pull; $(MAKE)
+DOCKER_BUILD=cd ~/docker/docker-$@; git checkout master; git pull ;$(MAKE)
+QNIB_CHECKOUT=if [ ! -d ~/docker/$@ ];then git clone git@github.com:qnib/$@ ~/src/github.com/qnib/$@;ln -sf ~/src/github.com/qnib/$@ ~/docker/;fi
+CK_CHECKOUT=if [ ! -d ~/docker/$@ ];then git clone git@github.com:ChristianKniep/$@ ~/src/github.com/ChristianKniep/$@;ln -sf ~/src/github.com/ChristianKniep/$@ ~/docker/;fi
 
 include ~/src/github.com/ChristianKniep/QNIBTerminal/docker_alpine.mk
-
-d-supervisor:
-	$(PLAIN_BUILD)
-
-d-syslog: d-supervisor
-	$(PLAIN_BUILD)
-
-d-consul: d-syslog
-	$(PLAIN_BUILD)
-
-d-terminal: d-consul
-	$(PLAIN_BUILD)
-
-d-node: d-terminal
-	$(PLAIN_BUILD)
+include ~/src/github.com/ChristianKniep/QNIBTerminal/docker_debian.mk
 
 u-supervisor:
 	$(PLAIN_BUILD)
@@ -35,12 +23,6 @@ u-samza: u-terminal
 
 convert: u-terminal
 	$(DOCKER_BUILD)
-
-rocketchat: d-node
-	cd ~/docker/docker-$@; $(MAKE)
-
-hubot-rocketchat: d-node
-	cd ~/docker/docker-$@; $(MAKE)
 
 fedora:
 	$(DOCKER_BUILD)

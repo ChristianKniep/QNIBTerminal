@@ -14,7 +14,7 @@ build:
 		git pull; \
 		docker build -q -t $(NAME):$$tag . ; \
 		if [ "X$${DOCKER_REG}" != "X" ];then \
-			docker tag -f $(NAME):$$tag $$DOCKER_REG/$(NAME):$$tag; \
+			docker tag $(NAME):$$tag $$DOCKER_REG/$(NAME):$$tag; \
 			docker push $$DOCKER_REG/$(NAME):$$tag; \
 		fi; \
 	done;
