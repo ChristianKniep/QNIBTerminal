@@ -5,24 +5,8 @@ CK_CHECKOUT=if [ ! -d ~/docker/$@ ];then git clone git@github.com:ChristianKniep
 
 include ~/src/github.com/ChristianKniep/QNIBTerminal/docker_alpine.mk
 include ~/src/github.com/ChristianKniep/QNIBTerminal/docker_debian.mk
+include ~/src/github.com/ChristianKniep/QNIBTerminal/docker_ubuntu.mk
 
-u-supervisor:
-	$(PLAIN_BUILD)
-
-u-syslog: u-supervisor
-	$(PLAIN_BUILD)
-
-u-consul: u-syslog
-	$(PLAIN_BUILD)
-
-u-terminal: u-consul
-	$(PLAIN_BUILD)
-
-u-samza: u-terminal
-	$(PLAIN_BUILD)
-
-convert: u-terminal
-	$(DOCKER_BUILD)
 
 fedora:
 	$(DOCKER_BUILD)
@@ -108,14 +92,8 @@ jmxtrans7: java7
 kafka: jmxtrans7
 	cd ~/docker/docker-$@; $(MAKE)
 
-kafka-manager: java7
-	cd ~/docker/docker-$@; $(MAKE)
-
 kafka-monitor: java7
 	cd ~/docker/docker-$@; $(MAKE)
-
-openldap: u-terminal
-	$(DOCKER_BUILD)
 
 etcd: terminal
 	$(DOCKER_BUILD)
