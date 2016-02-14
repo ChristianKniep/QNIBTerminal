@@ -51,9 +51,6 @@ terminal: diamond
 carbon: terminal
 	cd ~/docker/docker-$@; $(MAKE)
 
-graphite-api: terminal
-	cd ~/docker/docker-$@; $(MAKE)
-
 graphite-web: terminal
 	cd ~/docker/docker-$@; $(MAKE)
 
