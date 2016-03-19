@@ -14,13 +14,13 @@ fedora:
 supervisor: fedora
 	cd ~/docker/docker-$@; $(MAKE)
 
-syslog: supervisor
-	cd ~/docker/docker-$@; $(MAKE)
-
-bats: syslog
+bats: supervisor
 	cd ~/docker/docker-$@; $(MAKE)
 
 consul: bats
+	cd ~/docker/docker-$@; $(MAKE)
+
+syslog: supervisor
 	cd ~/docker/docker-$@; $(MAKE)
 
 sensu: consul
