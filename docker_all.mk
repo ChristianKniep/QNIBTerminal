@@ -24,13 +24,13 @@ syslog: supervisor
 	cd ~/docker/docker-$@; $(MAKE)
 
 sensu: consul
-	cd ~/docker/docker-$@; $(make)
+	$(DOCKER_BUILD)
 
 diamond: sensu
-	cd ~/docker/docker-$@; $(make)
+	$(DOCKER_BUILD)
 
 terminal: diamond
-	cd ~/docker/docker-$@; $(MAKE)
+	$(DOCKER_BUILD)
 
 carbon: terminal
 	cd ~/docker/docker-$@; $(MAKE)
