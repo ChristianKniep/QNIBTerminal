@@ -20,10 +20,10 @@ bats: supervisor
 consul: bats
 	cd ~/docker/docker-$@; $(MAKE)
 
-syslog: supervisor
+syslog: consul
 	cd ~/docker/docker-$@; $(MAKE)
 
-sensu: consul
+sensu: syslog
 	$(DOCKER_BUILD)
 
 diamond: sensu

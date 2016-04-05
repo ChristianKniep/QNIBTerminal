@@ -32,6 +32,14 @@ alpn-jre7: alpn-syslog
 	$(QNIB_CHECKOUT)
 	$(PLAIN_BUILD)
 
+gocd-server: alpn-jre7
+	$(QNIB_CHECKOUT)
+	$(PLAIN_BUILD)
+
+alpn-gocd-agent: alpn-jre7
+	$(QNIB_CHECKOUT)
+	$(PLAIN_BUILD)
+
 graphite-api: alpn-syslog
 	$(QNIB_CHECKOUT)
 	$(DOCKER_BUILD)
