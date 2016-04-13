@@ -2,7 +2,6 @@
 alias gs='git status'
 alias machine='docker-machine'
 
-
 export DHOST=${DHOST-localhost}
 export QNIB_REG=${QNIB_REG}
 
@@ -292,6 +291,7 @@ function dbuild {
         echo ">> docker tag -f ${1} ${DOCKER_REG}/${1}"
         docker tag -f ${1} ${DOCKER_REG}/${1}
         docker push ${DOCKER_REG}/${1}
+        rm_reg_from_dockerfile
     fi
 }
 
@@ -403,5 +403,6 @@ function set_dhost {
         fi
     fi
 }
+
 export DOCKER_HOST="tcp://${DHOST}:${DPORT}"
 set_dhost $(get_default_dhost)
