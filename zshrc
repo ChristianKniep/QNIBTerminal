@@ -239,6 +239,7 @@ function ckill {
     if [ "X${COMPOSE_FILE}" != "X" ];then
         CFILE="-f ${COMPOSE_FILE}"
     fi
+    docker run -ti $1 consul leave 
     docker-compose ${CFILE} kill $@;docker-compose ${CFILE} rm --force
 }
 
