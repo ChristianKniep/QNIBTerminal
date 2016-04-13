@@ -12,7 +12,7 @@ export DOCKER_REG=${DOCKER_REG}
 # \setup 2.0
 
 function dgit_check {
-   for x in ${QNIB_PROJECTS};do 
+   for x in ${QNIB_PROJECTS};do
        if [ -d docker-${x} ];then
            pushd docker-${x}
            git status -s
@@ -219,15 +219,6 @@ function dexec {
     docker exec -ti ${img} ${exe}
 }
 
-function dbuild {
-    echo "> docker build '${1}'"
-    docker build --rm ${2} -t ${1} .
-    if [ "X${DOCKER_REG}" != "X" ];then
-        echo ">> docker tag -f ${1} ${DOCKER_REG}/${1}"
-        docker tag -f ${1} ${DOCKER_REG}/${1}
-        docker push ${DOCKER_REG}/${1}
-    fi
-}
 
 function drun {
     docker run -ti --rm --privileged ${MOUNTS} ${1} /bin/bash
@@ -241,6 +232,7 @@ function cup {
     fi
     docker-compose ${CFILE} up -d $@
 }
+
 function ckill {
     # Kill docker-compose stack
     CFILE=""
@@ -249,6 +241,7 @@ function ckill {
     fi
     docker-compose ${CFILE} kill $@;docker-compose ${CFILE} rm --force
 }
+
 function crecreate {
     ckill $@;docker-compose up -d --no-recreate
 }
@@ -284,11 +277,28 @@ function add_reg_to_compose {
    sed -i '' -e "s#image: \(.*\)#image: ${DOCKER_REG}/\1#" ${1-docker-compose.yml}
 }
 
+function dbuild {
+    if [ "X${DOCKER_REG}" != "X" ];then
+        add_reg_to_dockerfile
+    fi
+    echo "> docker build '${1}'"
+    docker build --rm ${2} -t ${1} .
+    EC=$?
+    if [ ${EC} -ne 0 ];then
+        echo ">> Build failed..."
+        return ${EC}
+    elif [ "X${DOCKER_REG}" != "X" ];then
+        echo ">> docker tag -f ${1} ${DOCKER_REG}/${1}"
+        docker tag -f ${1} ${DOCKER_REG}/${1}
+        docker push ${DOCKER_REG}/${1}
+    fi
+}
+
 ####  remove DOCKER_REG from files
 function rm_reg_from_dockerfile {
     IMG_NAME=$(grep ^FROM Dockerfile|awk '{print $2}')
     if [ $(echo ${IMG_NAME} | grep -o "/" | wc -l) -eq 2 ];then
-        NEW_NAME=$(echo ${IMG_NAME} | awk -F/ '{print $2"/"$3}') 
+        NEW_NAME=$(echo ${IMG_NAME} | awk -F/ '{print $2"/"$3}')
         sed -i '' -e "s#FROM.*#FROM ${NEW_NAME}#" Dockerfile
     else
         echo ${IMG_NAME}
@@ -318,8 +328,8 @@ function get_default_dhost {
 		echo $(machine ls|grep -v ^NAME)
     else
         echo $(machine ls|grep "*"|awk '{print $1}')
-    fi 
-       
+    fi
+
 }
 
 function get_dckr_cfg {
@@ -377,12 +387,12 @@ function set_dhost {
         export DOCKER_HOST=tcp://${DCKR_HOST}:${DCKR_PORT}
         if [ "X${DCKR_CA}" != "X" ];then
             export DOCKER_TLS_VERIFY=1
-            export DOCKER_CERT_PATH=${DCKR_CA} 
+            export DOCKER_CERT_PATH=${DCKR_CA}
         fi
     else
         if [ "X${DCKR_HOST}" = "X" ];then
             DCKR_HOST=${ACT}
-        #else 
+        #else
         #    machine active ${DCKR_HOST}
         fi
         eval "$(docker-machine env ${DCKR_HOST})"
