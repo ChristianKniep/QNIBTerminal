@@ -241,7 +241,7 @@ function ckill {
     if [ ! -z "$@" ];then
         for container in $@;do
             docker run -ti ${container} consul leave 
-        fi
+        done
     fi
     docker-compose ${CFILE} kill $@;docker-compose ${CFILE} rm --force
 }
