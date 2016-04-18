@@ -282,7 +282,7 @@ function dbuild {
         add_reg_to_dockerfile
     fi
     echo "> docker build '${1}'"
-    docker build --rm ${2} -t ${1} .
+    docker build ${2} -t ${1} .
     EC=$?
     if [ ${EC} -ne 0 ];then
         echo ">> Build failed..."
