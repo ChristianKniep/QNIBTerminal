@@ -238,11 +238,11 @@ function ckill {
     if [ "X${COMPOSE_FILE}" != "X" ];then
         CFILE="-f ${COMPOSE_FILE}"
     fi
-    if [ ! -z "$@" ];then
-        for container in $@;do
-            docker exec -ti ${container} consul leave 
-        done
-    fi
+#    if [ ! -z "$@" ];then
+#        for container in $@;do
+#            docker exec -ti ${container} consul leave 
+#        done
+#    fi
     docker-compose ${CFILE} kill $@;docker-compose ${CFILE} rm --force
 }
 
