@@ -263,6 +263,7 @@ function add_reg {
     fi
 }
 function add_reg_to_dockerfile {
+    DOCKER_REG=$(echo ${DOCKER_REG} |sed -e 's#/$##')
     IMG_NAME=$(grep ^FROM Dockerfile | awk '{print $2}')
     if [ $(echo ${IMG_NAME} | grep -o "/" | wc -l) -gt 2 ];then
         echo "Sure you wanna add the registry? Looks not right: ${IMG_NAME}"
@@ -292,11 +293,20 @@ function dbuild {
         echo ">> Build failed..."
         return ${EC}
     elif [ "X${DOCKER_REG}" != "X" ];then
-        echo ">> docker tag -f ${1} ${DOCKER_REG}/${1}"
-        docker tag -f ${1} ${DOCKER_REG}/${1}
+        echo ">> docker tag ${1} ${DOCKER_REG}/${1}"
+        docker tag ${1} ${DOCKER_REG}/${1}
         docker push ${DOCKER_REG}/${1}
         rm_reg_from_dockerfile
     fi
+}
+
+function dtag {
+    test -z ${DOCKER_REG}
+    docker tag $1 ${DOCKER_REG}/$1
+}
+function dtpush {
+    dtag $1
+    docker push ${DOCKER_REG}/$1
 }
 
 ####  remove DOCKER_REG from files
@@ -408,5 +418,5 @@ function set_dhost {
     fi
 }
 
-export DOCKER_HOST="tcp://${DHOST}:${DPORT}"
-set_dhost $(get_default_dhost)
+#export DOCKER_HOST="tcp://${DHOST}:${DPORT}"
+#set_dhost $(get_default_dhost)
