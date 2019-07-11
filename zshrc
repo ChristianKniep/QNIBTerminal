@@ -95,3 +95,19 @@ function dbuild {
     fi
 }
 
+function getDir() {
+  echo $1 | awk -F/ '{
+    n=NF-'$2'+1;
+    if(n<1)exit;
+    for (i=n;i<=NF;i++) {
+        printf("/%s",$i);
+    }}' |sed -e 's#^/##'
+}
+
+function getLowerDir() {
+  if [[ -z $1 ]];then
+    getDir $(pwd) |tr '[:upper:]' '[:lower:]'
+  else 
+    getDir $1 |tr '[:upper:]' '[:lower:]'
+  fi
+}
