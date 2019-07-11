@@ -68,10 +68,13 @@ function drun_priv {
 }
 
 function dexec {
-    img=$1
-    if [ "$#" -eq 1 ];then
+    if [[ -z $1 ]];then
+      img=$(docker ps -ql)
         exe=bash
     else
+      img=$1
+    fi
+    if [[ "$#" -ge 2 ]];then
         shift
         exe="$@"
     fi
