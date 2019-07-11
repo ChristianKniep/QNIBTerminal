@@ -86,6 +86,10 @@ function drun {
 alias compose="docker-compose"
 
 function dbuild {
+    if [[ -z $1 ]];then
+      dbuild $(getLowerDir)
+      return $?
+    fi
     echo "> docker build '${1}'"
     docker build ${2} -t ${1} .
     EC=$?
