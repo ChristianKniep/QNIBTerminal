@@ -94,7 +94,7 @@ function dbuild {
       return $?
     fi
     echo "> docker build '${1}'"
-    docker build ${2} -t ${1} .
+    docker build ${2} --progress=plain -t ${1} .
     EC=$?
     if [ ${EC} -ne 0 ];then
         echo ">> Build failed..."
